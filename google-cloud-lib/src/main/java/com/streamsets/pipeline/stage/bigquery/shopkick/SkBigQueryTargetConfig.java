@@ -71,35 +71,49 @@ public class SkBigQueryTargetConfig{
     public InvalidColumnHandler invalidColumnHandler = InvalidColumnHandler.AUTO_ADD_COLUMNS;
     
     @ConfigDef(
-        required =  true,
-        type = ConfigDef.Type.NUMBER,
-        defaultValue = "-1",
-        label = "Table Cache size",
-        description = "Configures the cache size for storing TableId entries." +
-            " Use -1 for unlimited number of tableId entries in the cache.",
+        required = true,
+        type = ConfigDef.Type.MODEL,
+        label = "Auto Add Retry Handling",
+        description = "Retry handling when insert call fails after adding columns to a table)",
+        defaultValue = "NON_BLOCKING",
         displayPosition = 60,
         group = "BIGQUERY",
-        min = -1,
-        max = Integer.MAX_VALUE
-    )
-    public int maxCacheSize = -1;
+        dependsOn = "invalidColumnHandler",
+        triggeredByValue = {"AUTO_ADD_COLUMNS"}         
+        )
+    @ValueChooserModel(AutoAddColRetryHandlerValues.class)
+    public AutoAddColRetryHandler autoAddRetryHandler = AutoAddColRetryHandler.NON_BLOCKING;    
     
     @ConfigDef(
         required =  true,
         type = ConfigDef.Type.NUMBER,
         defaultValue = "2",
         label = "MaxWaitTime for Retries(min)",
-        description = "Sometimes bigquery insert API takes time to refresh" +
+        description = "Bigquery insert API takes some time to refresh" +
             " the new schema after a table update, typically 2 mins.",
         displayPosition = 70,
         group = "BIGQUERY",
         min = 0,
         max = 1440,
-        dependsOn = "invalidColumnHandler",
-        triggeredByValue = {"AUTO_ADD_COLUMNS"}        
-    )
+        dependsOn = "autoAddRetryHandler",
+        triggeredByValue = {"BLOCKING"}        
+        )
     public int maxWaitTimeForInsertMins = 2;      
-
+    
+    @ConfigDef(
+        required =  true,
+        type = ConfigDef.Type.NUMBER,
+        defaultValue = "-1",
+        label = "Table Cache size",
+        description = "Configures the cache size for storing TableId entries." +
+            " Use -1 for unlimited number of tableId entries in the cache.",
+        displayPosition = 80,
+        group = "BIGQUERY",
+        min = -1,
+        max = Integer.MAX_VALUE
+    )
+    public int maxCacheSize = -1;
+    
     @ConfigDefBean(groups = "CREDENTIALS")
     public GoogleCloudCredentialsConfig credentials = new GoogleCloudCredentialsConfig();
 }
