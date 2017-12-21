@@ -37,6 +37,7 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
+  private static final int NUM_SECS_IN_MIN = 60;
   private static final int RETRY_SLEEP_TIME_MS = 500;
   private static final String REASON_STOPPED = "stopped";
   private static final String REASON_INVALID = "invalid";
@@ -56,10 +57,13 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private SkBigQueryTargetConfig conf;
   private int maxWaitTimeForInsertMins;
   private boolean retryForInsertErrors;
+  private boolean autoAddColumns;
 
   public SkBigQueryTarget(SkBigQueryTargetConfig conf, BigQueryTargetConfig bqConf) {
     super(bqConf);
     this.conf = conf;
+    this.autoAddColumns = InvalidColumnHandler.AUTO_ADD_COLUMNS.equals(conf.invalidColumnHandler)
+        && !bqConf.ignoreInvalidColumn;
     this.maxWaitTimeForInsertMins = conf.maxWaitTimeForInsertMins;
     this.retryForInsertErrors = conf.autoAddRetryHandler == AutoAddColRetryHandler.BLOCKING;
   }
@@ -104,7 +108,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   @Override
   protected void handleInsertErrors(TableId tableId, ELVars elVars,
       Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
-    if (!conf.autoAddTable) {
+    if (!autoAddColumns) {
       super.reportErrors(requestIndexToRecords, response);
     }
 
@@ -160,11 +164,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private void insertAllWithRetries(Map<Long, Record> requestIndexToRecords, ELVars elVars,
       TableId tableId, InsertAllRequest request, int sleepTimeSec, int elapsedSec) {
 
-    int elapsedMin = elapsedSec / 60;
-    if (elapsedMin > maxWaitTimeForInsertMins) {
+    int elapsedMin = elapsedSec / NUM_SECS_IN_MIN;
+    if (elapsedMin >= maxWaitTimeForInsertMins) {
       LOG.warn("Cannot Send message through retries. Elapsed: {} Secs. Trying once more",
           elapsedSec);
-      addRecordValueToHeader(requestIndexToRecords);
+      addRetryFlagInHeaders(requestIndexToRecords);
       insertAll(requestIndexToRecords, elVars, tableId, request, false);
       return;
     }
@@ -182,7 +186,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
             if (!retryForInsertErrors) {
               LOG.debug(
                   "Auto Add Col Insert Error Retry disabled, sending record to error handler");
-              addRecordValueToHeader(requestIndexToRecords);
+              addRetryFlagInHeaders(requestIndexToRecords);
               super.reportErrors(requestIndexToRecords, response);
               return;
             }
@@ -208,11 +212,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
-  private void addRecordValueToHeader(Map<Long, Record> requestIndexToRecords) {
+  private void addRetryFlagInHeaders(Map<Long, Record> requestIndexToRecords) {
     Iterator<Entry<Long, Record>> iterator = requestIndexToRecords.entrySet().iterator();
     while (iterator.hasNext()) {
       Record record = iterator.next().getValue();
-      record.getHeader().setAttribute(AUTO_ADD_COLUMNS_INSERT_FAILURE, "");
+      setErrorAttribute(AUTO_ADD_COLUMNS_INSERT_FAILURE, record, "retry");
     }
   }
 
@@ -334,8 +338,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   protected void sleep() {
     try {
-      LOG.debug("Sleeping for seconds before calling insertAll again");
-      Thread.sleep(3000);
+      int sleepTime = 3000;
+      LOG.debug("Sleeping for {} seconds before calling insertAll again", sleepTime);
+      Thread.sleep(sleepTime);
     } catch (InterruptedException e) {
       LOG.info("Interrupted", e);
     }
