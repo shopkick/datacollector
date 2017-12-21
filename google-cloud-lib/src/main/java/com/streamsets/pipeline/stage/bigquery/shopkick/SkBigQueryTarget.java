@@ -110,6 +110,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
     if (!autoAddColumns) {
       super.reportErrors(requestIndexToRecords, response);
+      return;
     }
 
     List<Record> retry = new ArrayList<>();
