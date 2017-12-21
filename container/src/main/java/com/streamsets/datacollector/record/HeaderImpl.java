@@ -174,13 +174,6 @@ public class HeaderImpl implements Record.Header, Predicate<String>, Cloneable, 
     Preconditions.checkNotNull(value, "value cannot be null");
     map.put(name, value);
   }
-  
-  public void setObjectAttribute(String name, Object value) {
-    Preconditions.checkNotNull(name, "name cannot be null");
-    Preconditions.checkArgument(!name.startsWith(RESERVED_PREFIX), RESERVED_PREFIX_EXCEPTION_MSG);
-    Preconditions.checkNotNull(value, "value cannot be null");
-    map.put(name, value);
-  }
 
   @Override
   public void deleteAttribute(String name) {

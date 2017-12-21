@@ -113,7 +113,7 @@ public class BadRecordsHandler {
             
             String jsonString = toJsonString(record);
             if( jsonString != null) {
-              errorRecord.getHeader().setObjectAttribute(STAGE_RECORD, jsonString);
+              errorRecord.getHeader().setAttribute(STAGE_RECORD, jsonString);
             }
             break;
           default:
