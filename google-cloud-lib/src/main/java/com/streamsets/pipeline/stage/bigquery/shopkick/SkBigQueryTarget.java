@@ -3,6 +3,7 @@ package com.streamsets.pipeline.stage.bigquery.shopkick;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -463,8 +464,12 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private com.google.cloud.bigquery.Field convertSsToBqField(Field field, String fieldPath) {
     String fieldName = fieldPath.replaceFirst(FORWARD_SLASH, "");
 
-    if (field.getType().equals(Type.LIST)) {
+    if (Type.LIST.equals(field.getType())) {
       return getFieldForList(field, fieldName);
+    }
+
+    if (Type.LIST_MAP.equals(field.getType()) || Type.MAP.equals(field.getType())) {
+      return getFieldForMap(field, fieldName);
     }
 
     com.google.cloud.bigquery.Field.Type bqFieldType = DATA_TYPE_MAP.get(field.getType());
@@ -474,26 +479,63 @@ public class SkBigQueryTarget extends BigQueryTarget {
     return null;
   }
 
-  private com.google.cloud.bigquery.Field getFieldForList(Field field, String fieldPath) {
+  /**
+   * Convert Stremsets List field to Bigquery Repeated field with corresponding datatype
+   */
+  private com.google.cloud.bigquery.Field getFieldForList(Field field, String fieldName) {
     List<Field> values = field.getValueAsList();
     if (values.size() == 0) {
-      LOG.debug("List: {} empty, cannot determine data type. Cannot auto create", fieldPath);
+      LOG.debug("List: {} empty, cannot determine data type. Cannot auto create", fieldName);
       return null;
     }
     Field first = values.get(0);
     com.google.cloud.bigquery.Field.Type bqType = DATA_TYPE_MAP.get(first.getType());
     if (bqType != null) {
-      return com.google.cloud.bigquery.Field.of(fieldPath, bqType).toBuilder()
+      return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder()
           .setMode(Mode.REPEATED).build();
     } else {
       return null;
     }
   }
 
+  /**
+   * Convert Stremsets ListMap field to Bigquery Record field with corresponding datatypes for each
+   * field in record
+   */
+  private com.google.cloud.bigquery.Field getFieldForMap(Field ssField, String fieldName) {
+    Map<String, Field> value = ssField.getValueAsMap();
+
+    if (value == null || value.isEmpty()) {
+      LOG.warn("Cannot auto add column {} for type {} since the value is empty", fieldName,
+          ssField.getType());
+      return null;
+    }
+
+    List<com.google.cloud.bigquery.Field> fields = new ArrayList<>();
+    Iterator<Entry<String, Field>> iterator = value.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Entry<String, Field> next = iterator.next();
+      String subFieldName = next.getKey();
+      Field subField = next.getValue();
+      com.google.cloud.bigquery.Field bqField = convertSsToBqField(subField, subFieldName);
+      if (bqField == null) {
+        LOG.debug("{}: {} empty, cannot determine data type for Subfield", subField.getType(),
+            subFieldName);
+        return null;
+      }
+      fields.add(bqField);
+    }
+    com.google.cloud.bigquery.Field.Type bqType =
+        com.google.cloud.bigquery.Field.Type.record(fields);
+    return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
+  }
+
   private static Map<Field.Type, com.google.cloud.bigquery.Field.Type> DATA_TYPE_MAP =
       new HashMap<>();
+
   static {
     DATA_TYPE_MAP.put(Type.BOOLEAN, com.google.cloud.bigquery.Field.Type.bool());
+    DATA_TYPE_MAP.put(Type.BYTE_ARRAY, com.google.cloud.bigquery.Field.Type.bytes());
     DATA_TYPE_MAP.put(Type.STRING, com.google.cloud.bigquery.Field.Type.string());
     DATA_TYPE_MAP.put(Type.SHORT, com.google.cloud.bigquery.Field.Type.integer());
     DATA_TYPE_MAP.put(Type.LONG, com.google.cloud.bigquery.Field.Type.integer());
@@ -503,6 +545,10 @@ public class SkBigQueryTarget extends BigQueryTarget {
     DATA_TYPE_MAP.put(Type.DATETIME, com.google.cloud.bigquery.Field.Type.timestamp());
     DATA_TYPE_MAP.put(Type.FLOAT, com.google.cloud.bigquery.Field.Type.floatingPoint());
     DATA_TYPE_MAP.put(Type.DOUBLE, com.google.cloud.bigquery.Field.Type.floatingPoint());
+
+    // List and Map types are handled separately
+    // DATA_TYPE_MAP.put(Type.LIST_MAP, com.google.cloud.bigquery.Field.Type.record());
+    // DATA_TYPE_MAP.put(Type.LIST, com.google.cloud.bigquery.Field.Type.<repeated_type>));
   }
 
   class Result {
