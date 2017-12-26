@@ -3,7 +3,6 @@ package com.streamsets.pipeline.stage.bigquery.shopkick;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -38,8 +37,12 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
+  private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
+  private static final int ERR_CODE_BAD_REQUEST = 400;
+  private static final int ERR_CODE_DUPLICATE = 409;
   private static final int NUM_SECS_IN_MIN = 60;
   private static final int RETRY_SLEEP_TIME_MS = 500;
+  private static final int MAX_RETRIES = 3;
   private static final String REASON_STOPPED = "stopped";
   private static final String REASON_INVALID = "invalid";
   private static final String NO_SUCH_FIELD = "no such field.";
@@ -95,14 +98,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
     } catch (Exception e) {
       setErrorAttribute(ERR_BQ_AUTO_CREATE_TABLE, record, e.getMessage());
       LOG.info("Exception in big query auto create table {}.{}", datasetName, tableName, e);
-      super.handleTableNotFound(record, datasetName, tableName, null);
+      super.handleTableNotFound(record, datasetName, Errors.BIGQUERY_18, tableName, null);
       return;
     }
     if (result == null || !result.result) {
       setErrorAttribute(ERR_BQ_AUTO_CREATE_TABLE, record, result.message);
       LOG.info("Auto create failed for table {}.{}. Message: {}", datasetName, tableName,
           result.message);
-      super.handleTableNotFound(record, datasetName, tableName, null);
+      super.handleTableNotFound(record, datasetName, Errors.BIGQUERY_18, tableName, null);
     }
   }
 
@@ -153,7 +156,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private void addMissingColumnsInBigQuery(TableId tableId, List<Record> retry,
       List<ErrorRecord> missingCols) {
     missingCols.forEach(err -> {
-      Result added = addMissingColumnsInBigQuery(tableId, err.record);
+      Result added = addMissingColumnsInBigQuery(tableId, err.record, 0);
       if (added.result) {
         retry.add(err.record);
       } else {
@@ -273,7 +276,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
     });
   }
 
-  private Result addMissingColumnsInBigQuery(TableId tableId, Record record) {
+  private Result addMissingColumnsInBigQuery(TableId tableId, Record record, int retry) {
+
     String tableName = tableId.getTable();
     if (isPartitioned(tableName)) {
       tableName = extractTableName(tableName);
@@ -289,28 +293,54 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
 
     if (!result.fields.isEmpty()) {
-      Schema schema = Schema.of(result.fields);
-      TableInfo tableInfo =
-          table.toBuilder().setDefinition(StandardTableDefinition.of(schema)).build();
-      Table update = bigQuery.update(tableInfo);
-      LOG.info("Table updated with additional fields: " + update);
-
-      boolean updateDone = isTableUpdated(update, tableId, result);
-
-      if (!updateDone) {
-        String errMsg = String.format("Update not getting reflected in table %s", tableId);
-        LOG.warn(errMsg);
-        return new Result(false, errMsg);
-      }
+      return updateTable(tableId, record, retry, tableIdOnly, table, result.fields);
     }
 
     return new Result();
   }
 
-  private boolean isTableUpdated(Table updateResponse, TableId tableId, Result result) {
+  private Result updateTable(TableId tableId, Record record, int retry, TableId tableIdOnly,
+      Table table, List<com.google.cloud.bigquery.Field> fields) {
+    Schema schema = Schema.of(fields);
+    TableInfo tableInfo =
+        table.toBuilder().setDefinition(StandardTableDefinition.of(schema)).build();
+
+    Table update = null;
+
+    try {
+      update = bigQuery.update(tableInfo);
+      LOG.info("Table updated with additional fields: " + update);
+    } catch (BigQueryException e) {
+      if (e.getCode() == ERR_CODE_BAD_REQUEST) {
+        BigQueryError error = e.getError();
+        if (error != null && error.getMessage() != null
+            && error.getMessage().endsWith(OLD_SCHEMA_ERROR_SUFFIX)) {
+          if (retry >= MAX_RETRIES) {
+            return new Result(false, "Table update error - Missing schema - retries exhausted");
+          }
+          return addMissingColumnsInBigQuery(tableIdOnly, record, retry + 1);
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    boolean updateDone = isTableUpdated(update, tableId, fields);
+
+    if (!updateDone) {
+      String errMsg = String.format("Update not getting reflected in table %s", tableId);
+      LOG.warn(errMsg);
+      return new Result(false, errMsg);
+    }
+
+    return new Result();
+  }
+
+  private boolean isTableUpdated(Table updateResponse, TableId tableId,
+      List<com.google.cloud.bigquery.Field> fields) {
     int retryCount = 0;
 
-    boolean updateDone = checkTableHasFields(updateResponse, result.fields);
+    boolean updateDone = checkTableHasFields(updateResponse, fields);
     while (!updateDone && retryCount < ADD_COLS_RETRIES) {
       try {
         LOG.debug("Sleeping for {} seconds for checking whether table {} updated",
@@ -319,7 +349,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       } catch (InterruptedException e) {
         LOG.debug("Interrupted", e);
       }
-      updateDone = checkTableHasFields(tableId, result.fields);
+      updateDone = checkTableHasFields(tableId, fields);
       retryCount++;
     }
     return updateDone;
@@ -335,7 +365,16 @@ public class SkBigQueryTarget extends BigQueryTarget {
       List<com.google.cloud.bigquery.Field> allFields) {
     List<com.google.cloud.bigquery.Field> tableFields =
         table.getDefinition().getSchema().getFields();
-    return tableFields.containsAll(allFields);
+
+    boolean containsAll = tableFields.containsAll(allFields);
+    if (!containsAll) {
+      for (com.google.cloud.bigquery.Field field : allFields) {
+        if (!tableFields.contains(field)) {
+          LOG.warn("Field {} expected in big query, but not found", field);
+        }
+      }
+    }
+    return containsAll;
   }
 
   protected void sleep() {
@@ -415,6 +454,25 @@ public class SkBigQueryTarget extends BigQueryTarget {
   }
 
   private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields) {
+    TableInfo tableInfo = buildTableSchema(tableId, fields);
+    Table table = null;
+
+    try {
+      table = bigQuery.create(tableInfo);
+      LOG.info("Table {} not found, created", tableInfo.getTableId());
+    } catch (BigQueryException e) {
+      if (e.getCode() == ERR_CODE_DUPLICATE) {
+        LOG.info("Table {} already created, not trying", tableInfo.getTableId());
+        table = bigQuery.getTable(tableInfo.getTableId());
+      } else {
+        throw e;
+      }
+    }
+    LOG.debug("Table details {}", table);
+  }
+
+  private TableInfo buildTableSchema(TableId tableId,
+      List<com.google.cloud.bigquery.Field> fields) {
     Schema schema = Schema.of(fields);
     TableInfo tableInfo = null;
     String tableName = tableId.getTable();
@@ -428,9 +486,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     } else {
       tableInfo = TableInfo.newBuilder(tableId, StandardTableDefinition.of(schema)).build();
     }
-    Table table = bigQuery.create(tableInfo);
-    LOG.info("Table {} not found, created", tableInfo.getTableId());
-    LOG.debug("Table details {}", table);
+    return tableInfo;
   }
 
   protected String extractTableName(String tableName) {
@@ -474,7 +530,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     com.google.cloud.bigquery.Field.Type bqFieldType = DATA_TYPE_MAP.get(field.getType());
     if (bqFieldType != null) {
-      return com.google.cloud.bigquery.Field.of(fieldName, bqFieldType);
+      return com.google.cloud.bigquery.Field.newBuilder(fieldName, bqFieldType)
+          .setMode(Mode.NULLABLE).build();
     }
     return null;
   }

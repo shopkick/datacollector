@@ -234,10 +234,16 @@ public class BigQueryTarget extends BaseTarget {
 	  getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
   }
 
-  protected void handleTableNotFound(Record record, String datasetName, String tableName, Map<TableId, List<Record>> tableIdToRecords) {
-    getContext().toError(record, Errors.BIGQUERY_17, datasetName, tableName, conf.credentials.projectId);
+  protected void handleTableNotFound(Record record, String datasetName, String tableName,
+      Map<TableId, List<Record>> tableIdToRecords) {
+    handleTableNotFound(record, datasetName, Errors.BIGQUERY_17, tableName, tableIdToRecords);
   }
-  
+
+  protected void handleTableNotFound(Record record, String datasetName, Errors errorCode,
+      String tableName, Map<TableId, List<Record>> tableIdToRecords) {
+    getContext().toError(record, errorCode, datasetName, tableName, conf.credentials.projectId);
+  }
+
   protected void refreshTableIdExistsCache(TableId key) {
 	tableIdExistsCache.refresh(key);
   }

@@ -32,6 +32,8 @@ public enum Errors implements ErrorCode {
   BIGQUERY_15("Error evaluated Row Id, value evaluates to empty"),
   BIGQUERY_16("Root field of record should be a Map or a List Map"),
   BIGQUERY_17("Data set '{}' or Table '{}' does not exist in Big Query under project '{}'"),
+  
+  BIGQUERY_18("Auto table creation error {}.{} in Big Query under project '{}'"),
   ;
 
   private final String msg;
