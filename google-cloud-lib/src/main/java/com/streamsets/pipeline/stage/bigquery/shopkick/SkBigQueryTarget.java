@@ -377,16 +377,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
     return containsAll;
   }
 
-  protected void sleep() {
-    try {
-      int sleepTime = 3000;
-      LOG.debug("Sleeping for {} seconds before calling insertAll again", sleepTime);
-      Thread.sleep(sleepTime);
-    } catch (InterruptedException e) {
-      LOG.info("Interrupted", e);
-    }
-  }
-
   private Result getAllColumns(Table table, Record record) {
     List<com.google.cloud.bigquery.Field> bqFields = table.getDefinition().getSchema().getFields();
     List<com.google.cloud.bigquery.Field> additional = new ArrayList<>();
