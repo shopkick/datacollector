@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -37,6 +38,7 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
+  private static final String EMPTY = "";
   private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets";
   private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
   private static final int ERR_CODE_BAD_REQUEST = 400;
@@ -51,7 +53,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private static final int PARTITION_DATE_SUFFIX_LEN = 9;
   private static final char ARRAY_START_CHAR = '[';
   private static final char FORWARD_SLASH_CHAR = '/';
-  private static final String FORWARD_SLASH = FORWARD_SLASH_CHAR + "";
+  private static final String FORWARD_SLASH = FORWARD_SLASH_CHAR + EMPTY;
   private static final String ERR_BQ_AUTO_CREATE_TABLE = "ERR_BQ_AUTO_CREATE_TABLE";
   private static final String ERR_BQ_AUTO_ADD_COLUMNS = "ERR_BQ_AUTO_ADD_COLUMNS";
   private static final String AUTO_ADD_COLUMNS_INSERT_FAILURE = "AUTO_ADD_COLUMNS_INSERT_FAILURE";
@@ -122,14 +124,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
     List<ErrorRecord> stopped = new ArrayList<>();
     List<ErrorRecord> missingCols = new ArrayList<>();
 
-    bucketizeErrors(requestIndexToRecords, response, stopped, missingCols);
+    bucketizeErrors(requestIndexToRecords, response, stopped, missingCols, true);
 
     if (!missingCols.isEmpty()) {
       addMissingColumnsInBigQuery(tableId, retry, missingCols);
     }
 
     if (!retry.isEmpty()) {
-      insertBatchAgain(tableId, elVars, requestIndexToRecords, retry, stopped);
+      insertBatchAgain(tableId, elVars, retry, stopped);
     } else {
       if (!stopped.isEmpty()) {
         stopped.forEach(r -> super.handleInsertError(r.record, r.messages, r.reasons));
@@ -137,15 +139,18 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
-  private void insertBatchAgain(TableId tableId, ELVars elVars,
-      Map<Long, Record> requestIndexToRecords, List<Record> retry, List<ErrorRecord> stopped) {
+  private void insertBatchAgain(TableId tableId, ELVars elVars, List<Record> retry,
+      List<ErrorRecord> stopped) {
+    Map<Long, Record> requestIndexToRecords = new HashMap<>();
+    final AtomicLong index = new AtomicLong(0);
     InsertAllRequest.Builder insertAllRequestBuilder = InsertAllRequest.newBuilder(tableId);
     insertAllRequestBuilder.setIgnoreUnknownValues(false);
     insertAllRequestBuilder.setSkipInvalidRows(false);
-    addToInsertRequest(elVars, retry, insertAllRequestBuilder);
+    addToInsertRequest(elVars, requestIndexToRecords, index, retry, insertAllRequestBuilder);
 
     if (!stopped.isEmpty()) {
-      addToInsertRequest(elVars, stopped.stream().map(e -> e.record).collect(Collectors.toList()),
+      addToInsertRequest(elVars, requestIndexToRecords, index,
+          stopped.stream().map(e -> e.record).collect(Collectors.toList()),
           insertAllRequestBuilder);
     }
 
@@ -161,6 +166,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       if (added.result) {
         retry.add(err.record);
       } else {
+        LOG.debug(added.message);
         setErrorAttribute(ERR_BQ_AUTO_ADD_COLUMNS, err.record, added.message);
         super.handleInsertError(err.record, err.messages, err.reasons);
       }
@@ -187,11 +193,10 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
           List<ErrorRecord> stopped = new ArrayList<>();
           List<ErrorRecord> missingCols = new ArrayList<>();
-          bucketizeErrors(requestIndexToRecords, response, stopped, missingCols);
+          bucketizeErrors(requestIndexToRecords, response, stopped, missingCols, false);
           if (missingCols.size() > 0) {
             if (!retryForInsertErrors) {
-              LOG.debug(
-                  "Auto Add Col Insert Error Retry disabled, sending record to error handler");
+              LOG.debug("Auto Add Col Insert Error Retry disabled, sending batch to error handler");
               addRetryFlagInHeaders(requestIndexToRecords);
               super.reportErrors(requestIndexToRecords, response);
               return;
@@ -200,7 +205,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
             insertAllWithRetries(requestIndexToRecords, elVars, tableId, request,
                 sleepTimeSec + sleepTimeSec, elapsedSec + sleepTimeSec);
           } else {
-            LOG.warn("Cannot retry for unknown errors");
+            LOG.warn("Cannot insert after auto add, found unknown errors");
             super.reportErrors(requestIndexToRecords, response);
             return;
           }
@@ -235,8 +240,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
-  private void addToInsertRequest(ELVars elVars, List<Record> retry,
-      InsertAllRequest.Builder insertAllRequestBuilder) {
+  private void addToInsertRequest(ELVars elVars, Map<Long, Record> requestIndexToRecords,
+      AtomicLong index, List<Record> retry, InsertAllRequest.Builder insertAllRequestBuilder) {
     retry.forEach(record -> {
       try {
         String insertId = getInsertIdForRecord(elVars, record);
@@ -244,6 +249,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         if (rowContent.isEmpty()) {
           throw new OnRecordErrorException(record, Errors.BIGQUERY_14);
         }
+        requestIndexToRecords.put(index.getAndIncrement(), record);
         insertAllRequestBuilder.addRow(insertId, rowContent);
       } catch (OnRecordErrorException e) {
         LOG.error("Error when converting record {} to row, Reason : {} ",
@@ -254,7 +260,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   }
 
   private void bucketizeErrors(Map<Long, Record> requestIndexToRecords, InsertAllResponse response,
-      List<ErrorRecord> stopped, List<ErrorRecord> missingCols) {
+      List<ErrorRecord> stopped, List<ErrorRecord> missingCols, boolean reportError) {
     response.getInsertErrors().forEach((requestIdx, errors) -> {
       Record record = requestIndexToRecords.get(requestIdx);
       String messages = COMMA_JOINER
@@ -271,7 +277,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
       } else if (REASON_INVALID.equalsIgnoreCase(reasons)
           && NO_SUCH_FIELD.equalsIgnoreCase(messages)) {
         missingCols.add(new ErrorRecord(record, messages, reasons));
-      } else {
+      } else if (reportError) {
+        LOG.debug("Auto create error: Cannot bucketize unknown errors: " + reasons);
         super.handleInsertError(record, messages, reasons);
       }
     });
@@ -381,31 +388,40 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private Result getAllColumns(Table table, Record record) {
     List<com.google.cloud.bigquery.Field> bqFields = table.getDefinition().getSchema().getFields();
     List<com.google.cloud.bigquery.Field> additional = new ArrayList<>();
-    Result ssFields = convertSsToBqFields(record);
-    if (!ssFields.result) {
-      setErrorAttribute(ERR_BQ_AUTO_ADD_COLUMNS, record, ssFields.message);
-      LOG.error(ssFields.message);
-      return ssFields;
+
+    Map<String, com.google.cloud.bigquery.Field> bqFieldMap = new HashMap<>();
+
+    if (bqFields != null) {
+      bqFields.forEach(f -> bqFieldMap.put(f.getName(), f));
     }
-    Map<String, com.google.cloud.bigquery.Field> fieldMap = new HashMap<>();
-    bqFields.forEach(f -> fieldMap.put(f.getName(), f));
-    for (com.google.cloud.bigquery.Field field : ssFields.fields) {
-      String fieldName = field.getName();
-      if (fieldMap.containsKey(fieldName)) {
-        com.google.cloud.bigquery.Field.Type ssFieldType = field.getType();
-        com.google.cloud.bigquery.Field.Type bqFieldType = fieldMap.get(fieldName).getType();
-        if (!ssFieldType.equals(bqFieldType)) {
-          String errorMsg = String.format(
-              "Type mismatch while trying to auto add column: In Streamsets: %s, In BigQuery: %s",
-              ssFieldType, bqFieldType);
-          LOG.error(errorMsg);
-          return new Result(false, errorMsg);
+
+    Set<String> ssFieldPaths = getValidFieldPaths(record.getEscapedFieldPaths());
+
+    if (ssFieldPaths == null) {
+      return new Result(false,
+          "Auto create failed. No valid field path exists in the record " + record);
+    }
+
+    for (String ssFieldPath : ssFieldPaths) {
+      String ssFieldName = getFieldNameFromPath(ssFieldPath);
+
+      if (!bqFieldMap.containsKey(ssFieldName)) {
+        LOG.debug("Found new field: [{}] in record which is not in bigquery, detecting schema",
+            ssFieldName);
+        Field ssField = record.get(ssFieldPath);
+        com.google.cloud.bigquery.Field bqFieldNew = convertSsToBqField(ssField, ssFieldName);
+
+        if (bqFieldNew == null) {
+          return new Result(false,
+              String.format("Auto create failed. Cannot determine schema for field: %s, Type: %s",
+                  ssFieldPath, ssField.getType()));
         }
-      } else {
-        field = field.toBuilder().setDescription(AUTO_ADDED_BY_STREAMSETS).build();
-        additional.add(field);
+
+        bqFieldNew = bqFieldNew.toBuilder().setDescription(AUTO_ADDED_BY_STREAMSETS).build();
+        additional.add(bqFieldNew);
       }
     }
+
     if (!additional.isEmpty()) {
       additional.addAll(bqFields);
     }
@@ -429,20 +445,40 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private Result convertSsToBqFields(Record record) {
     List<com.google.cloud.bigquery.Field> fields = new ArrayList<>();
     Set<String> fieldPaths = record.getEscapedFieldPaths();
-    for (String fieldPath : fieldPaths) {
-      if (!fieldPathValid(fieldPath))
-        continue;
+
+    Set<String> validPaths = getValidFieldPaths(fieldPaths);
+
+    if (validPaths == null) {
+      return new Result(false,
+          "Auto create failed. No valid field path exists in the record " + record);
+    }
+
+    for (String fieldPath : validPaths) {
       Field field = record.get(fieldPath);
       LOG.debug("Converting ss field {} with type {} to bq field", fieldPath, field.getType());
-      com.google.cloud.bigquery.Field bqField = convertSsToBqField(field, fieldPath);
+      String fieldName = getFieldNameFromPath(fieldPath);
+      com.google.cloud.bigquery.Field bqField = convertSsToBqField(field, fieldName);
       if (bqField == null) {
         Result result = new Result(false,
-            String.format("Unsupported datatype: %s for auto create", field.getType()));
+            String.format("Auto create failed. Cannot determine schema for field: %s, Type: %s",
+                fieldPath, field.getType()));
         return result;
       }
       fields.add(bqField);
     }
     return new Result(fields);
+  }
+
+  private String getFieldNameFromPath(String fieldPath) {
+    return fieldPath.replaceFirst(FORWARD_SLASH, EMPTY);
+  }
+
+  private Set<String> getValidFieldPaths(Set<String> fieldPaths) {
+    if (fieldPaths == null || fieldPaths.isEmpty()) {
+      return null;
+    }
+
+    return fieldPaths.parallelStream().filter(e -> isValidFieldPath(e)).collect(Collectors.toSet());
   }
 
   private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields) {
@@ -489,8 +525,12 @@ public class SkBigQueryTarget extends BigQueryTarget {
     return PARTITION_PATTERN.matcher(table).find();
   }
 
-  private boolean fieldPathValid(String fieldPath) {
-    if (fieldPath.trim().isEmpty()) {
+  private boolean isValidFieldPath(String fieldPath) {
+    if (fieldPath != null && fieldPath.trim().isEmpty()) {
+      return false;
+    }
+
+    if (fieldPath.charAt(0) != FORWARD_SLASH_CHAR) {
       return false;
     }
 
@@ -509,9 +549,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
    * 
    * @param fieldPath
    */
-  private com.google.cloud.bigquery.Field convertSsToBqField(Field field, String fieldPath) {
-    String fieldName = fieldPath.replaceFirst(FORWARD_SLASH, "");
-
+  private com.google.cloud.bigquery.Field convertSsToBqField(Field field, String fieldName) {
     if (Type.LIST.equals(field.getType())) {
       return getFieldForList(field, fieldName);
     }
