@@ -37,6 +37,7 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
+  private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets";
   private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
   private static final int ERR_CODE_BAD_REQUEST = 400;
   private static final int ERR_CODE_DUPLICATE = 409;
@@ -401,6 +402,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
           return new Result(false, errorMsg);
         }
       } else {
+        field = field.toBuilder().setDescription(AUTO_ADDED_BY_STREAMSETS).build();
         additional.add(field);
       }
     }
@@ -531,7 +533,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
    */
   private com.google.cloud.bigquery.Field getFieldForList(Field field, String fieldName) {
     List<Field> values = field.getValueAsList();
-    if (values.size() == 0) {
+    if (values != null && values.size() == 0) {
       LOG.debug("List: {} empty, cannot determine data type. Cannot auto create", fieldName);
       return null;
     }
