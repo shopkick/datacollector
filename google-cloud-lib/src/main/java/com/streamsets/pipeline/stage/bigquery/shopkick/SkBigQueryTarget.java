@@ -571,7 +571,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
    */
   private com.google.cloud.bigquery.Field getFieldForList(Field field, String fieldName) {
     List<Field> values = field.getValueAsList();
-    if (values != null && values.size() == 0) {
+    if (values == null || values.isEmpty()) {
       LOG.debug("List: {} empty, cannot determine data type. Cannot auto create", fieldName);
       return null;
     }
