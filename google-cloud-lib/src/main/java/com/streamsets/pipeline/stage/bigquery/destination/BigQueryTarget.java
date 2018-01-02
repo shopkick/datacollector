@@ -211,12 +211,12 @@ public class BigQueryTarget extends BaseTarget {
 		  }
 		}
 	  } catch (BigQueryException e) {
-		handleBigQueryException(requestIndexToRecords, request, e);
+		handleBigqueryException(requestIndexToRecords, request, e);
 	  }
 	}
   }
 
-  protected void handleBigQueryException(Map<Long, Record> requestIndexToRecords,
+  protected void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
       InsertAllRequest request, BigQueryException e) {
     LOG.error(Errors.BIGQUERY_13.getMessage(), e);
 		// Put all records to error.

@@ -215,6 +215,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         }
       } catch (BigQueryException e) {
         LOG.error(Errors.BIGQUERY_13.getMessage(), e);
+        handleBigqueryException(requestIndexToRecords, e);
         // Put all records to error.
         for (long i = 0; i < request.getRows().size(); i++) {
           Record record = requestIndexToRecords.get(i);
@@ -228,20 +229,29 @@ public class SkBigQueryTarget extends BigQueryTarget {
     Iterator<Entry<Long, Record>> iterator = requestIndexToRecords.entrySet().iterator();
     while (iterator.hasNext()) {
       Record record = iterator.next().getValue();
-      setErrorAttribute(ERR_ACTION, record, "retry");
-      if(errorCode != -1) {
-        setErrorAttribute(ERR_BQ_ERROR_CODE, record, Integer.toString(errorCode));
-      }
+      addRetryFlagInHeader(errorCode, record);
     }
   }
-  
+
+  private void addRetryFlagInHeader(int errorCode, Record record) {
+    setErrorAttribute(ERR_ACTION, record, "retry");
+    if (errorCode != -1) {
+      setErrorAttribute(ERR_BQ_ERROR_CODE, record, Integer.toString(errorCode));
+    }
+  }
+
   @Override
-  protected void handleBigQueryException(Map<Long, Record> requestIndexToRecords,
+  protected void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
       InsertAllRequest request, BigQueryException e) {
-    if(e.isRetryable()) {
+    handleBigqueryException(requestIndexToRecords, e);
+    super.handleBigqueryException(requestIndexToRecords, request, e);
+  }
+
+  private void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
+      BigQueryException e) {
+    if (e.isRetryable()) {
       addRetryFlagInHeaders(requestIndexToRecords, e.getCode());
     }
-    super.handleBigQueryException(requestIndexToRecords, request, e);
   }
 
   private void sleep(int sleepTimeSec) {
@@ -340,10 +350,12 @@ public class SkBigQueryTarget extends BigQueryTarget {
             return new Result(false, "Table update error - Missing schema - retries exhausted");
           }
           return addMissingColumnsInBigQuery(tableIdOnly, record, retry + 1);
-        } else {
-          throw e;
         }
       }
+      if(e.isRetryable()) {
+        addRetryFlagInHeader(e.getCode(), record);
+      }
+      throw e;
     }
 
     boolean updateDone = isTableUpdated(update, tableId, fields);
@@ -451,7 +463,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     if (!fieldsResult.result) {
       return fieldsResult;
     }
-    createTable(tableId, fieldsResult.fields);
+    createTable(tableId, fieldsResult.fields, record);
     return new Result();
   }
 
@@ -494,7 +506,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     return fieldPaths.parallelStream().filter(e -> isValidFieldPath(e)).collect(Collectors.toSet());
   }
 
-  private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields) {
+  private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields, Record record) {
     TableInfo tableInfo = buildTableSchema(tableId, fields);
     Table table = null;
 
@@ -506,6 +518,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
         LOG.info("Table {} already created, not trying", tableInfo.getTableId());
         table = bigQuery.getTable(tableInfo.getTableId());
       } else {
+        if(e.isRetryable()) {
+          addRetryFlagInHeader(e.getCode(), record);
+        }
         throw e;
       }
     }
