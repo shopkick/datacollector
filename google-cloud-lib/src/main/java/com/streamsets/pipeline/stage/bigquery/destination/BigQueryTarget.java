@@ -211,14 +211,19 @@ public class BigQueryTarget extends BaseTarget {
 		  }
 		}
 	  } catch (BigQueryException e) {
-		LOG.error(Errors.BIGQUERY_13.getMessage(), e);
+		handleBigQueryException(requestIndexToRecords, request, e);
+	  }
+	}
+  }
+
+  protected void handleBigQueryException(Map<Long, Record> requestIndexToRecords,
+      InsertAllRequest request, BigQueryException e) {
+    LOG.error(Errors.BIGQUERY_13.getMessage(), e);
 		// Put all records to error.
 		for (long i = 0; i < request.getRows().size(); i++) {
 		  Record record = requestIndexToRecords.get(i);
 		  getContext().toError(record, Errors.BIGQUERY_13, e);
 		}
-	  }
-	}
   }
 
   protected void handleInsertErrors(TableId tableId, ELVars elVars, Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {

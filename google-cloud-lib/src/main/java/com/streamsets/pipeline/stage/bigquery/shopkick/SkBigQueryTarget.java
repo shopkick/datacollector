@@ -56,7 +56,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private static final String FORWARD_SLASH = FORWARD_SLASH_CHAR + EMPTY;
   private static final String ERR_BQ_AUTO_CREATE_TABLE = "ERR_BQ_AUTO_CREATE_TABLE";
   private static final String ERR_BQ_AUTO_ADD_COLUMNS = "ERR_BQ_AUTO_ADD_COLUMNS";
-  private static final String AUTO_ADD_COLUMNS_INSERT_FAILURE = "AUTO_ADD_COLUMNS_INSERT_FAILURE";
+  private static final String ERR_ACTION = "ERR_ACTION";
+  private static final String ERR_BQ_ERROR_CODE = "ERR_BIGQUERY_ERROR_CODE";
   private static final Logger LOG = LoggerFactory.getLogger(SkBigQueryTarget.class);
 
   private static final Pattern PARTITION_PATTERN = Pattern.compile("\\$\\d{4}\\d{2}\\d{2}$");
@@ -180,7 +181,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     if (elapsedMin >= maxWaitTimeForInsertMins) {
       LOG.warn("Cannot Send message through retries. Elapsed: {} Secs. Trying once more",
           elapsedSec);
-      addRetryFlagInHeaders(requestIndexToRecords);
+      addRetryFlagInHeaders(requestIndexToRecords, -1);
       insertAll(requestIndexToRecords, elVars, tableId, request, false);
       return;
     }
@@ -197,7 +198,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
           if (missingCols.size() > 0) {
             if (!retryForInsertErrors) {
               LOG.debug("Auto Add Col Insert Error Retry disabled, sending batch to error handler");
-              addRetryFlagInHeaders(requestIndexToRecords);
+              addRetryFlagInHeaders(requestIndexToRecords, -1);
               super.reportErrors(requestIndexToRecords, response);
               return;
             }
@@ -223,12 +224,24 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
-  private void addRetryFlagInHeaders(Map<Long, Record> requestIndexToRecords) {
+  private void addRetryFlagInHeaders(Map<Long, Record> requestIndexToRecords, int errorCode) {
     Iterator<Entry<Long, Record>> iterator = requestIndexToRecords.entrySet().iterator();
     while (iterator.hasNext()) {
       Record record = iterator.next().getValue();
-      setErrorAttribute(AUTO_ADD_COLUMNS_INSERT_FAILURE, record, "retry");
+      setErrorAttribute(ERR_ACTION, record, "retry");
+      if(errorCode != -1) {
+        setErrorAttribute(ERR_BQ_ERROR_CODE, record, Integer.toString(errorCode));
+      }
     }
+  }
+  
+  @Override
+  protected void handleBigQueryException(Map<Long, Record> requestIndexToRecords,
+      InsertAllRequest request, BigQueryException e) {
+    if(e.isRetryable()) {
+      addRetryFlagInHeaders(requestIndexToRecords, e.getCode());
+    }
+    super.handleBigQueryException(requestIndexToRecords, request, e);
   }
 
   private void sleep(int sleepTimeSec) {
