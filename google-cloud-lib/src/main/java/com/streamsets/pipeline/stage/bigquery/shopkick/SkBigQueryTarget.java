@@ -353,6 +353,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     if (!result.fields.isEmpty()) {
       return updateTable(tableId, record, retry, tableIdOnly, table, result.fields);
+    } else {
+      LOG.debug("No additional fields found to update the table: {}", tableIdOnly);
     }
 
     return new Result();
@@ -441,7 +443,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private Result getAllColumns(Table table, Record record) {
     List<com.google.cloud.bigquery.Field> bqFields = table.getDefinition().getSchema().getFields();
     List<com.google.cloud.bigquery.Field> additional = new ArrayList<>();
-    List<String> noSchema = new ArrayList<>();
 
     Map<String, com.google.cloud.bigquery.Field> bqFieldMap = new HashMap<>();
 
@@ -466,7 +467,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
         com.google.cloud.bigquery.Field bqFieldNew = convertSsToBqField(ssField, ssFieldName);
 
         if (bqFieldNew == null) {
-          noSchema.add(ssFieldName);
           LOG.debug("Cannot determine schema for field: {}, Type: {}, ignoring", ssFieldPath,
               ssField.getType());
           continue;
@@ -480,10 +480,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
     if (!additional.isEmpty()) {
       additional.addAll(bqFields);
       return new Result(additional);
-    } else {
-      return new Result(false,
-          "Auto create column failed. Cannot determine schema for any new field:" + noSchema);
     }
+
+    return new Result();
   }
 
   private void setErrorAttribute(String attribute, Record record, String message) {
