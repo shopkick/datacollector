@@ -293,7 +293,7 @@ public class BigQueryTarget extends BaseTarget {
       for (Map.Entry<String, Field> fieldEntry : fieldMap.entrySet()) {
         Field field = fieldEntry.getValue();
         //Skip null value fields
-        if (field.getValue() != null){
+        if (includeField(field)){
           try {
             rowObject.put(fieldEntry.getKey(), getValueFromField("/" + fieldEntry.getKey(), field));
           } catch (IllegalArgumentException e) {
@@ -305,6 +305,10 @@ public class BigQueryTarget extends BaseTarget {
       throw new OnRecordErrorException(record,  Errors.BIGQUERY_16);
     }
     return rowObject;
+  }
+
+  protected boolean includeField(Field field) {
+    return field.getValue() != null;
   }
 
   /**

@@ -101,13 +101,13 @@ public class SkBigQueryTarget extends BigQueryTarget {
       }
     } catch (Exception e) {
       setErrorAttribute(ERR_BQ_AUTO_CREATE_TABLE, record, e.getMessage());
-      LOG.info("Exception in big query auto create table {}.{}", datasetName, tableName, e);
+      LOG.warn("Exception in big query auto create table {}.{}", datasetName, tableName, e);
       super.handleTableNotFound(record, datasetName, Errors.BIGQUERY_18, tableName, null);
       return;
     }
     if (result == null || !result.result) {
       setErrorAttribute(ERR_BQ_AUTO_CREATE_TABLE, record, result.message);
-      LOG.info("Auto create failed for table {}.{}. Message: {}", datasetName, tableName,
+      LOG.debug("Auto create failed for table {}.{}. Message: {}", datasetName, tableName,
           result.message);
       super.handleTableNotFound(record, datasetName, Errors.BIGQUERY_18, tableName, null);
     }
@@ -282,6 +282,34 @@ public class SkBigQueryTarget extends BigQueryTarget {
     });
   }
 
+  protected boolean includeField(Field field) {
+    if (super.includeField(field)) {
+      Type type = field.getType();
+      if (type == Type.LIST) {
+        List<Field> value = field.getValueAsList();
+        return value != null && !value.isEmpty();
+      } else if (type == Type.MAP || type == Type.LIST_MAP) {
+        Map<String, Field> value = field.getValueAsMap();
+        if (value == null || value.isEmpty()) {
+          return false;
+        }
+        Iterator<Entry<String, Field>> iterator = value.entrySet().iterator();
+        while (iterator.hasNext()) {
+          Field subVal = iterator.next().getValue();
+          if (subVal == null) {
+            return false;
+          }
+          if (!includeField(subVal)) {
+            return false;
+          }
+        }
+      }
+    } else {
+      return false;
+    }
+    return true;
+  }
+
   private void bucketizeErrors(Map<Long, Record> requestIndexToRecords, InsertAllResponse response,
       List<ErrorRecord> stopped, List<ErrorRecord> missingCols, boolean reportError) {
     response.getInsertErrors().forEach((requestIdx, errors) -> {
@@ -352,7 +380,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
           return addMissingColumnsInBigQuery(tableIdOnly, record, retry + 1);
         }
       }
-      if(e.isRetryable()) {
+      if (e.isRetryable()) {
         addRetryFlagInHeader(e.getCode(), record);
       }
       throw e;
@@ -413,6 +441,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private Result getAllColumns(Table table, Record record) {
     List<com.google.cloud.bigquery.Field> bqFields = table.getDefinition().getSchema().getFields();
     List<com.google.cloud.bigquery.Field> additional = new ArrayList<>();
+    List<String> noSchema = new ArrayList<>();
 
     Map<String, com.google.cloud.bigquery.Field> bqFieldMap = new HashMap<>();
 
@@ -424,7 +453,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     if (ssFieldPaths == null) {
       return new Result(false,
-          "Auto create failed. No valid field path exists in the record " + record);
+          "Auto create column failed. No valid field path exists in the record " + record);
     }
 
     for (String ssFieldPath : ssFieldPaths) {
@@ -437,9 +466,10 @@ public class SkBigQueryTarget extends BigQueryTarget {
         com.google.cloud.bigquery.Field bqFieldNew = convertSsToBqField(ssField, ssFieldName);
 
         if (bqFieldNew == null) {
-          return new Result(false,
-              String.format("Auto create failed. Cannot determine schema for field: %s, Type: %s",
-                  ssFieldPath, ssField.getType()));
+          noSchema.add(ssFieldName);
+          LOG.debug("Cannot determine schema for field: {}, Type: {}, ignoring", ssFieldPath,
+              ssField.getType());
+          continue;
         }
 
         bqFieldNew = bqFieldNew.toBuilder().setDescription(AUTO_ADDED_BY_STREAMSETS).build();
@@ -449,8 +479,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     if (!additional.isEmpty()) {
       additional.addAll(bqFields);
+      return new Result(additional);
+    } else {
+      return new Result(false,
+          "Auto create column failed. Cannot determine schema for any new field:" + noSchema);
     }
-    return new Result(additional);
   }
 
   private void setErrorAttribute(String attribute, Record record, String message) {
@@ -484,14 +517,19 @@ public class SkBigQueryTarget extends BigQueryTarget {
       String fieldName = getFieldNameFromPath(fieldPath);
       com.google.cloud.bigquery.Field bqField = convertSsToBqField(field, fieldName);
       if (bqField == null) {
-        Result result = new Result(false,
-            String.format("Auto create failed. Cannot determine schema for field: %s, Type: %s",
-                fieldPath, field.getType()));
-        return result;
+        LOG.debug("Cannot determine schema for field: {}, Type: {}, ignoring", fieldPath,
+            field.getType());
+        continue;
       }
       fields.add(bqField);
     }
-    return new Result(fields);
+
+    if (!fields.isEmpty()) {
+      return new Result(fields);
+    } else {
+      return new Result(false,
+          "Auto create failed. Cannot determine schema for any field:" + fieldPaths);
+    }
   }
 
   private String getFieldNameFromPath(String fieldPath) {
@@ -506,7 +544,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
     return fieldPaths.parallelStream().filter(e -> isValidFieldPath(e)).collect(Collectors.toSet());
   }
 
-  private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields, Record record) {
+  private void createTable(TableId tableId, List<com.google.cloud.bigquery.Field> fields,
+      Record record) {
     TableInfo tableInfo = buildTableSchema(tableId, fields);
     Table table = null;
 
@@ -518,7 +557,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         LOG.info("Table {} already created, not trying", tableInfo.getTableId());
         table = bigQuery.getTable(tableInfo.getTableId());
       } else {
-        if(e.isRetryable()) {
+        if (e.isRetryable()) {
           addRetryFlagInHeader(e.getCode(), record);
         }
         throw e;
