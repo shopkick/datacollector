@@ -256,7 +256,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   private void sleep(int sleepTimeSec) {
     try {
-      LOG.info("Sleeping {} seconds before retry", sleepTimeSec);
+      LOG.info("Sleeping {} seconds before retrying the batch", sleepTimeSec);
       TimeUnit.SECONDS.sleep(sleepTimeSec);
     } catch (InterruptedException e) {
       LOG.info("Interrupted", e);
@@ -478,6 +478,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
 
     if (!additional.isEmpty()) {
+      LOG.info("Additional fields found in the record: {}, will try to update table: {}",
+          additional, table.getTableId());
       additional.addAll(bqFields);
       return new Result(additional);
     }
