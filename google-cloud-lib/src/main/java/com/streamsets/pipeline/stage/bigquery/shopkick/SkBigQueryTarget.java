@@ -38,30 +38,6 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
-  private static final String EMPTY = "";
-  private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets";
-  private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
-  private static final int ERR_CODE_BAD_REQUEST = 400;
-  private static final int ERR_CODE_DUPLICATE = 409;
-  private static final int NUM_SECS_IN_MIN = 60;
-  private static final int RETRY_SLEEP_TIME_MS = 500;
-  private static final int MAX_RETRIES = 3;
-  private static final String REASON_STOPPED = "stopped";
-  private static final String REASON_INVALID = "invalid";
-  private static final String NO_SUCH_FIELD = "no such field.";
-
-  private static final int PARTITION_DATE_SUFFIX_LEN = 9;
-  private static final char ARRAY_START_CHAR = '[';
-  private static final char FORWARD_SLASH_CHAR = '/';
-  private static final String FORWARD_SLASH = FORWARD_SLASH_CHAR + EMPTY;
-  private static final String ERR_BQ_AUTO_CREATE_TABLE = "ERR_BQ_AUTO_CREATE_TABLE";
-  private static final String ERR_BQ_AUTO_ADD_COLUMNS = "ERR_BQ_AUTO_ADD_COLUMNS";
-  private static final String ERR_ACTION = "ERR_ACTION";
-  private static final String ERR_BQ_ERROR_CODE = "ERR_BIGQUERY_ERROR_CODE";
-  private static final Logger LOG = LoggerFactory.getLogger(SkBigQueryTarget.class);
-
-  private static final Pattern PARTITION_PATTERN = Pattern.compile("\\$\\d{4}\\d{2}\\d{2}$");
-  private static final int ADD_COLS_RETRIES = 10;
   private SkBigQueryTargetConfig conf;
   private int maxWaitTimeForInsertMins;
   private boolean retryForInsertErrors;
@@ -147,10 +123,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
     InsertAllRequest.Builder insertAllRequestBuilder = InsertAllRequest.newBuilder(tableId);
     insertAllRequestBuilder.setIgnoreUnknownValues(false);
     insertAllRequestBuilder.setSkipInvalidRows(false);
-    addToInsertRequest(elVars, requestIndexToRecords, index, retry, insertAllRequestBuilder);
+    addToInsertRequest(tableId, elVars, requestIndexToRecords, index, retry,
+        insertAllRequestBuilder);
 
     if (!stopped.isEmpty()) {
-      addToInsertRequest(elVars, requestIndexToRecords, index,
+      addToInsertRequest(tableId, elVars, requestIndexToRecords, index,
           stopped.stream().map(e -> e.record).collect(Collectors.toList()),
           insertAllRequestBuilder);
     }
@@ -263,8 +240,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
-  private void addToInsertRequest(ELVars elVars, Map<Long, Record> requestIndexToRecords,
-      AtomicLong index, List<Record> retry, InsertAllRequest.Builder insertAllRequestBuilder) {
+  private void addToInsertRequest(TableId tableId, ELVars elVars,
+      Map<Long, Record> requestIndexToRecords, AtomicLong index, List<Record> retry,
+      InsertAllRequest.Builder insertAllRequestBuilder) {
     retry.forEach(record -> {
       try {
         String insertId = getInsertIdForRecord(elVars, record);
@@ -272,6 +250,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
         if (rowContent.isEmpty()) {
           throw new OnRecordErrorException(record, Errors.BIGQUERY_14);
         }
+        record.getHeader().setAttribute(BQ_TABLE_ID_DATASET, tableId.getDataset());
+        record.getHeader().setAttribute(BQ_TABLE_ID_TABLE, tableId.getTable());
         requestIndexToRecords.put(index.getAndIncrement(), record);
         insertAllRequestBuilder.addRow(insertId, rowContent);
       } catch (OnRecordErrorException e) {
@@ -684,32 +664,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
         com.google.cloud.bigquery.Field.Type.record(fields);
     return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
   }
-
-  private static Map<Field.Type, com.google.cloud.bigquery.Field.Type> DATA_TYPE_MAP =
-      new HashMap<>();
-
-  static {
-    DATA_TYPE_MAP.put(Type.BOOLEAN, com.google.cloud.bigquery.Field.Type.bool());
-    DATA_TYPE_MAP.put(Type.BYTE_ARRAY, com.google.cloud.bigquery.Field.Type.bytes());
-    DATA_TYPE_MAP.put(Type.STRING, com.google.cloud.bigquery.Field.Type.string());
-    DATA_TYPE_MAP.put(Type.SHORT, com.google.cloud.bigquery.Field.Type.integer());
-    DATA_TYPE_MAP.put(Type.LONG, com.google.cloud.bigquery.Field.Type.integer());
-    DATA_TYPE_MAP.put(Type.INTEGER, com.google.cloud.bigquery.Field.Type.integer());
-    DATA_TYPE_MAP.put(Type.DATE, com.google.cloud.bigquery.Field.Type.date());
-    DATA_TYPE_MAP.put(Type.TIME, com.google.cloud.bigquery.Field.Type.time());
-    DATA_TYPE_MAP.put(Type.DATETIME, com.google.cloud.bigquery.Field.Type.timestamp());
-    DATA_TYPE_MAP.put(Type.FLOAT, com.google.cloud.bigquery.Field.Type.floatingPoint());
-    DATA_TYPE_MAP.put(Type.DOUBLE, com.google.cloud.bigquery.Field.Type.floatingPoint());
-
-    // List and Map types are handled separately
-    // DATA_TYPE_MAP.put(Type.LIST_MAP, com.google.cloud.bigquery.Field.Type.record());
-    // DATA_TYPE_MAP.put(Type.LIST, com.google.cloud.bigquery.Field.Type.<repeated_type>));
-  }
-
+  
   class Result {
     private boolean result;
     private String message;
-    private List<com.google.cloud.bigquery.Field> fields;
+    private List<com.google.cloud.bigquery.Field> fields = new ArrayList<>();
 
     Result() {
       result = true;
@@ -736,5 +695,57 @@ public class SkBigQueryTarget extends BigQueryTarget {
       this.messages = messages;
       this.reasons = reasons;
     }
+  }  
+  
+  // ALL CONSTANTS ARE DEFINED BELOW
+
+  private static final Map<Field.Type, com.google.cloud.bigquery.Field.Type> DATA_TYPE_MAP =
+      new HashMap<>();
+
+  static {
+    DATA_TYPE_MAP.put(Type.BOOLEAN, com.google.cloud.bigquery.Field.Type.bool());
+    DATA_TYPE_MAP.put(Type.BYTE_ARRAY, com.google.cloud.bigquery.Field.Type.bytes());
+    DATA_TYPE_MAP.put(Type.STRING, com.google.cloud.bigquery.Field.Type.string());
+    DATA_TYPE_MAP.put(Type.SHORT, com.google.cloud.bigquery.Field.Type.integer());
+    DATA_TYPE_MAP.put(Type.LONG, com.google.cloud.bigquery.Field.Type.integer());
+    DATA_TYPE_MAP.put(Type.INTEGER, com.google.cloud.bigquery.Field.Type.integer());
+    DATA_TYPE_MAP.put(Type.DATE, com.google.cloud.bigquery.Field.Type.date());
+    DATA_TYPE_MAP.put(Type.TIME, com.google.cloud.bigquery.Field.Type.time());
+    DATA_TYPE_MAP.put(Type.DATETIME, com.google.cloud.bigquery.Field.Type.timestamp());
+    DATA_TYPE_MAP.put(Type.FLOAT, com.google.cloud.bigquery.Field.Type.floatingPoint());
+    DATA_TYPE_MAP.put(Type.DOUBLE, com.google.cloud.bigquery.Field.Type.floatingPoint());
+
+    // List and Map types are handled separately
+    // DATA_TYPE_MAP.put(Type.LIST_MAP, com.google.cloud.bigquery.Field.Type.record());
+    // DATA_TYPE_MAP.put(Type.LIST, com.google.cloud.bigquery.Field.Type.<repeated_type>));
   }
+  
+  private static final String BQ_TABLE_ID_TABLE = "BQ_TABLE_ID_TABLE";
+  private static final String BQ_TABLE_ID_DATASET = "BQ_TABLE_ID_DATASET";
+  private static final String EMPTY = "";
+  private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets";
+  private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
+  private static final int ERR_CODE_BAD_REQUEST = 400;
+  private static final int ERR_CODE_DUPLICATE = 409;
+  private static final int NUM_SECS_IN_MIN = 60;
+  private static final int RETRY_SLEEP_TIME_MS = 500;
+  private static final int MAX_RETRIES = 3;
+  private static final String REASON_STOPPED = "stopped";
+  private static final String REASON_INVALID = "invalid";
+  private static final String NO_SUCH_FIELD = "no such field.";
+
+  private static final int PARTITION_DATE_SUFFIX_LEN = 9;
+  private static final char ARRAY_START_CHAR = '[';
+  private static final char FORWARD_SLASH_CHAR = '/';
+  private static final String FORWARD_SLASH = FORWARD_SLASH_CHAR + EMPTY;
+  private static final String ERR_BQ_AUTO_CREATE_TABLE = "ERR_BQ_AUTO_CREATE_TABLE";
+  private static final String ERR_BQ_AUTO_ADD_COLUMNS = "ERR_BQ_AUTO_ADD_COLUMNS";
+  private static final String ERR_ACTION = "ERR_ACTION";
+  private static final String ERR_BQ_ERROR_CODE = "ERR_BIGQUERY_ERROR_CODE";
+  private static final Logger LOG = LoggerFactory.getLogger(SkBigQueryTarget.class);
+
+  private static final Pattern PARTITION_PATTERN = Pattern.compile("\\$\\d{4}\\d{2}\\d{2}$");
+  private static final int ADD_COLS_RETRIES = 10;
+
+
 }
