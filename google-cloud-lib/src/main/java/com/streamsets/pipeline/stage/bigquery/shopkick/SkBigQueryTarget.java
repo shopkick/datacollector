@@ -156,8 +156,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     int elapsedMin = elapsedSec / NUM_SECS_IN_MIN;
     if (elapsedMin >= maxWaitTimeForInsertMins) {
-      LOG.warn("Cannot Send message through retries. Elapsed: {} Secs. Trying once more",
-          elapsedSec);
+      LOG.info("Last retry for sending batch. Already Elapsed: {} Secs", elapsedSec);
       addRetryFlagInHeaders(requestIndexToRecords, -1);
       insertAll(requestIndexToRecords, elVars, tableId, request, false);
       return;
@@ -664,7 +663,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         com.google.cloud.bigquery.Field.Type.record(fields);
     return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
   }
-  
+
   class Result {
     private boolean result;
     private String message;
@@ -695,8 +694,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
       this.messages = messages;
       this.reasons = reasons;
     }
-  }  
-  
+  }
+
   // ALL CONSTANTS ARE DEFINED BELOW
 
   private static final Map<Field.Type, com.google.cloud.bigquery.Field.Type> DATA_TYPE_MAP =
@@ -719,7 +718,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     // DATA_TYPE_MAP.put(Type.LIST_MAP, com.google.cloud.bigquery.Field.Type.record());
     // DATA_TYPE_MAP.put(Type.LIST, com.google.cloud.bigquery.Field.Type.<repeated_type>));
   }
-  
+
   private static final String BQ_TABLE_ID_TABLE = "BQ_TABLE_ID_TABLE";
   private static final String BQ_TABLE_ID_DATASET = "BQ_TABLE_ID_DATASET";
   private static final String EMPTY = "";
