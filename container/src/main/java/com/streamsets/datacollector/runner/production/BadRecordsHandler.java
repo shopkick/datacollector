@@ -33,7 +33,7 @@ import com.streamsets.pipeline.api.Record;
 import com.streamsets.pipeline.api.StageException;
 
 public class BadRecordsHandler {
-  private static final String STAGE_RECORD = "stageRecord";
+  private static final String SOURCE_RECORD = "sourceRecord";
   private final ErrorRecordPolicy errorRecordPolicy;
   private final RuntimeInfo runtimeInfo;
   private final String pipelineName;
@@ -108,12 +108,14 @@ public class BadRecordsHandler {
             errorRecord = (RecordImpl) record;
             break;
           case BOTH:
-            errorRecord = (RecordImpl) ((RecordImpl)record).getHeader().getSourceRecord();
-            errorRecord.getHeader().copyErrorFrom(record);
-            
-            String jsonString = toJsonString(record);
-            if( jsonString != null) {
-              errorRecord.getHeader().setAttribute(STAGE_RECORD, jsonString);
+            errorRecord = (RecordImpl) record;
+            RecordImpl sourceRecord =
+                (RecordImpl) ((RecordImpl) record).getHeader().getSourceRecord();
+            if (sourceRecord != null) {
+              String jsonString = toJsonString(sourceRecord);
+              if (jsonString != null) {
+                errorRecord.getHeader().setAttribute(SOURCE_RECORD, jsonString);
+              }
             }
             break;
           default:
