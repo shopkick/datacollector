@@ -360,6 +360,7 @@ public abstract class MysqlSource extends BaseSource {
           serverErrors.add((ServerException) ex);
         } else {
           LOG.error("Unhandled communication error: {}", ex.getMessage(), ex);
+          serverErrors.add(new ServerException(ex.getMessage(), -1, "UN_HANDLED"));
         }
       }
 
