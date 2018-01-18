@@ -309,10 +309,8 @@ public abstract class MysqlSource extends BaseSource {
         }
       }
 
-      LOG.info("Disabling MySQL KeepAlive");
-      // Disabling KeepAlive since it has issues in re-connect on ping failures 
-      client.setKeepAlive(false);
-      
+      client.setKeepAlive(true);
+      client.setKeepAliveInterval(getConfig().connectTimeout);
       registerClientLifecycleListener();
       client.registerEventListener(consumer);
       client.connect(getConfig().connectTimeout);
