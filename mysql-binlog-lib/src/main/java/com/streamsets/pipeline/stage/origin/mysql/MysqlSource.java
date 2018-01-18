@@ -310,7 +310,10 @@ public abstract class MysqlSource extends BaseSource {
       }
 
       client.setKeepAlive(true);
-      client.setKeepAliveInterval(getConfig().connectTimeout);
+      
+      // Set KeepAlive interval to 1 minute as default 
+      client.setKeepAliveInterval(TimeUnit.MINUTES.toMillis(1));
+      
       registerClientLifecycleListener();
       client.registerEventListener(consumer);
       client.connect(getConfig().connectTimeout);
