@@ -207,7 +207,7 @@ public class BigQueryTarget extends BaseTarget {
 			handleInsertErrors(tableId, elVars, requestIndexToRecords, response);
 		  }
 		  else {
-			reportErrors(requestIndexToRecords, response);
+			reportErrors(request.getTable(), requestIndexToRecords, response);
 		  }
 		}
 	  } catch (BigQueryException e) {
@@ -227,10 +227,10 @@ public class BigQueryTarget extends BaseTarget {
   }
 
   protected void handleInsertErrors(TableId tableId, ELVars elVars, Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
-	reportErrors(requestIndexToRecords, response);
+	reportErrors(tableId, requestIndexToRecords, response);
   }
 
-  protected void reportErrors(Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
+  protected void reportErrors(TableId tableId, Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
 	response.getInsertErrors().forEach((requestIdx, errors) -> {
 	  Record record = requestIndexToRecords.get(requestIdx);
 	  String messages = COMMA_JOINER.join(errors.stream().map(BigQueryError::getMessage).collect(Collectors.toList()));
@@ -238,12 +238,16 @@ public class BigQueryTarget extends BaseTarget {
 	  String locations = COMMA_JOINER.join(errors.stream().map(BigQueryError::getLocation).collect(Collectors.toList()));
 	  LOG.error("Error when inserting record {}, Reasons : {}, Messages : {}, Locations: {}", record.getHeader().getSourceId(),
 		  reasons, messages, locations);
-	  handleInsertError(record, messages, reasons);
+	  handleInsertError(tableId, record, messages, reasons);
 	});
   }
 
+  protected void handleInsertError(TableId tableId, Record record, String messages, String reasons) {
+    handleInsertError(record, messages, reasons);
+  }
+  
   protected void handleInsertError(Record record, String messages, String reasons) {
-	  getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
+    getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
   }
 
   protected void handleTableNotFound(Record record, String datasetName, String tableName,
