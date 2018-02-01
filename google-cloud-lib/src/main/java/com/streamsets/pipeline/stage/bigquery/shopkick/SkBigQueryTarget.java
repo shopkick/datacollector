@@ -119,7 +119,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   @Override
   protected void handleInsertError(TableId tableId, Record record, String messages,
       String reasons) {
-    if (REASON_TIMEOUT.equals(reasons)) {
+    if (reasons != null && reasons.contains(REASON_TIMEOUT)) {
       addRetryFlagInHeader(tableId, -1, record);
     }
     super.handleInsertError(record, messages, reasons);
