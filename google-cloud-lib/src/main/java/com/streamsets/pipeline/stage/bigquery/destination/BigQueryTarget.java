@@ -135,10 +135,6 @@ public class BigQueryTarget extends BaseTarget {
   @Override
   public void write(Batch batch) throws StageException {
     Map<TableId, List<Record>> tableIdToRecords = new LinkedHashMap<>();
-    Map<Long, Record> requestIndexToRecords = new LinkedHashMap<>();
-    final AtomicLong index = new AtomicLong(0);
-    final AtomicBoolean areThereRecordsToWrite = new AtomicBoolean(false);
-
     if (batch.getRecords().hasNext()) {
       ELVars elVars = getContext().createELVars();
       batch.getRecords().forEachRemaining(record -> {
@@ -164,6 +160,9 @@ public class BigQueryTarget extends BaseTarget {
       });
 
       tableIdToRecords.forEach((tableId, records) -> {
+        final AtomicLong index = new AtomicLong(0);
+        final AtomicBoolean areThereRecordsToWrite = new AtomicBoolean(false);
+        Map<Long, Record> requestIndexToRecords = new LinkedHashMap<>();
         InsertAllRequest.Builder insertAllRequestBuilder = InsertAllRequest.newBuilder(tableId);
         records.forEach(record -> {
               try {
@@ -207,7 +206,7 @@ public class BigQueryTarget extends BaseTarget {
 			handleInsertErrors(tableId, elVars, requestIndexToRecords, response);
 		  }
 		  else {
-			reportErrors(request.getTable(), requestIndexToRecords, response);
+			reportErrors(tableId, requestIndexToRecords, response);
 		  }
 		}
 	  } catch (BigQueryException e) {
