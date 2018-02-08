@@ -105,19 +105,33 @@ public class SkBigQueryTargetConfig{
         required =  true,
         type = ConfigDef.Type.NUMBER,
         defaultValue = "3",
-        label = "MaxWaitTime for Backoff Retries(seconds)",
-        description = "Maximum backoff retry time for insert failures" +
-            " due to timeout errors or schema drift.",
+        label = "MaxWaitTime for Retries(min)",
+        description = "Maximum backoff retry time(minutes) for insert failures" +
+            " due to schema drift.",
         displayPosition = 80,
         group = "BIGQUERY",
         min = 0,
         max = 1440,
-        dependencies = {
-            @Dependency(configName = "autoAddRetryHandler", triggeredByValues = "BLOCKING"),
-            @Dependency(configName = "modeHandler", triggeredByValues = "ERROR_HANLDER")
-        }        
+        dependsOn = "autoAddRetryHandler",
+        triggeredByValue = {"BLOCKING"}        
     )
     public int maxWaitTimeForInsertMins = 3;
+    
+    @ConfigDef(
+        required =  true,
+        type = ConfigDef.Type.NUMBER,
+        defaultValue = "3",
+        label = "MaxWaitTime for Retries(min)",
+        description = "Maximum backoff retry time(minutes) for insert failures" +
+            " due to timeout errors or schema drift.",
+        displayPosition = 90,
+        group = "BIGQUERY",
+        min = 0,
+        max = 1440,
+        dependsOn = "modeHandler",
+        triggeredByValue = {"ERROR_HANLDER"}        
+    )
+    public int maxWaitTimeForRetryMins = 3;    
     
     @ConfigDef(
         required = false,
@@ -125,7 +139,7 @@ public class SkBigQueryTargetConfig{
         defaultValue = "true",
         label = "Ignore Invalid Column",
         description = "If enabled, field paths that cannot be mapped to columns will be ignored",
-        displayPosition = 90,
+        displayPosition = 100,
         group = "BIGQUERY",
         dependsOn = "modeHandler",
         triggeredByValue = {"DEFAULT"}
@@ -139,7 +153,7 @@ public class SkBigQueryTargetConfig{
         label = "Table Cache size",
         description = "Configures the cache size for storing TableId entries." +
             " Use -1 for unlimited number of tableId entries in the cache.",
-        displayPosition = 100,
+        displayPosition = 110,
         group = "BIGQUERY",
         min = -1,
         max = Integer.MAX_VALUE

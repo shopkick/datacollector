@@ -9,6 +9,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -56,7 +57,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       this.backoffMaxWaitTimeSec = conf.maxWaitTimeForInsertMins * 60;
     } else if (conf.modeHandler == ModeHandler.ERROR_HANLDER) {
       this.errorHandlingMode = true;
-      this.backoffMaxWaitTimeSec = conf.maxWaitTimeForInsertMins * 60;
+      this.backoffMaxWaitTimeSec = conf.maxWaitTimeForRetryMins * 60;
     }
   }
 
@@ -102,15 +103,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
       Map<Long, Record> requestIndexToRecords, InsertAllRequest request,
       InsertAllResponse response) {
     if (errorHandlingMode) {
-      if (isTimeoutError(requestIndexToRecords, response)) {
-        retryBatchForTimeoutError(tableId, requestIndexToRecords, request, response,
-            INITIAL_SLEEP_SEC, INITIAL_ELAPSED_SEC);
-        return;
-      } else {
-        retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request, INITIAL_SLEEP_SEC,
-            INITIAL_ELAPSED_SEC);
-        return;
-      }
+      handlerRetriesForErrorHandler(tableId, elVars, requestIndexToRecords, request, response);
+      return;
     }
 
     if (!autoAddColumns) {
@@ -135,6 +129,53 @@ public class SkBigQueryTarget extends BigQueryTarget {
         stopped.forEach(r -> super.handleInsertError(r.record, r.messages, r.reasons));
       }
     }
+  }
+
+  private void handlerRetriesForErrorHandler(TableId tableId, ELVars elVars,
+      Map<Long, Record> requestIndexToRecords, InsertAllRequest request,
+      InsertAllResponse response) {
+    if (isTimeoutError(requestIndexToRecords, response)) {
+      retryBatchForTimeoutError(tableId, requestIndexToRecords, request, response,
+          INITIAL_SLEEP_SEC, INITIAL_ELAPSED_SEC);
+    } else {
+      if (isErrorDueToSchemaDrift(tableId, requestIndexToRecords, response)) {
+        retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request, INITIAL_SLEEP_SEC,
+            INITIAL_ELAPSED_SEC);
+      } else {
+        super.reportErrors(tableId, requestIndexToRecords, response);
+      }
+    }
+  }
+
+  private boolean isErrorDueToSchemaDrift(TableId tableId, Map<Long, Record> requestIndexToRecords,
+      InsertAllResponse response) {
+    Map<Long, List<BigQueryError>> insertErrors = response.getInsertErrors();
+    List<Record> newFieldsRecords = new ArrayList<>(); 
+    for (Entry<Long, List<BigQueryError>> entry : insertErrors.entrySet()) {
+      List<BigQueryError> errors = entry.getValue();
+      String messages = errorsToString(errors, BigQueryError::getMessage);
+      String reasons = errorsToString(errors, BigQueryError::getReason);
+      if (REASON_INVALID.equalsIgnoreCase(reasons) && NO_SUCH_FIELD.equalsIgnoreCase(messages)) {
+        newFieldsRecords.add(requestIndexToRecords.get(entry.getKey()));
+      } else if (!REASON_STOPPED.equalsIgnoreCase(reasons)) {
+        LOG.debug(
+            "Error Handling retry error: Cannot retry batch due to unknown errors: " + reasons);
+        return false;
+      }
+    }
+    if (newFieldsRecords.isEmpty()) {
+      return false;
+    }
+
+    String tableName = tableId.getTable();
+    if (isPartitioned(tableName)) {
+      tableName = extractTableName(tableName);
+    }
+
+    // Table ID without partition suffix
+    TableId tableIdOnly = TableId.of(tableId.getDataset(), tableName);
+    Table table = bigQuery.getTable(tableIdOnly);
+    return newFieldsRecords.stream().allMatch(record -> getAllColumns(table, record).fields.isEmpty() );
   }
 
   private void retryBatchForTimeoutError(TableId tableId, Map<Long, Record> requestIndexToRecords,
@@ -190,12 +231,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
         Long requestIdx = entry.getKey();
         List<BigQueryError> errors = entry.getValue();
         Record record = requestIndexToRecords.get(requestIdx);
-        String messages = COMMA_JOINER
-            .join(errors.stream().map(BigQueryError::getMessage).collect(Collectors.toList()));
-        String reasons = COMMA_JOINER
-            .join(errors.stream().map(BigQueryError::getReason).collect(Collectors.toList()));
-        String locations = COMMA_JOINER
-            .join(errors.stream().map(BigQueryError::getLocation).collect(Collectors.toList()));
+        String messages = errorsToString(errors, BigQueryError::getMessage);
+        String reasons = errorsToString(errors, BigQueryError::getReason);
+        String locations = errorsToString(errors, BigQueryError::getLocation);
         LOG.debug(
             "<ERROR_HANDLER_RETRY> Handling Error retry for record {}, Reasons : {}, Messages : {}, Locations: {}",
             record.getHeader().getSourceId(), reasons, messages, locations);
@@ -261,7 +299,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
           List<ErrorRecord> stopped = new ArrayList<>();
           List<ErrorRecord> missingCols = new ArrayList<>();
           bucketizeErrors(tableId, requestIndexToRecords, response, stopped, missingCols, false);
-          if (missingCols.size() > 0) {
+          if (missingCols.size() > 0
+              && (requestIndexToRecords.size() == (stopped.size() + missingCols.size()))) {
             if (!retryForInsertErrors) {
               LOG.debug("Auto Add Col Insert Error Retry disabled, sending batch to error handler");
               addRetryFlagInHeaders(tableId, requestIndexToRecords, -1);
@@ -411,12 +450,9 @@ public class SkBigQueryTarget extends BigQueryTarget {
       boolean reportError) {
     response.getInsertErrors().forEach((requestIdx, errors) -> {
       Record record = requestIndexToRecords.get(requestIdx);
-      String messages = COMMA_JOINER
-          .join(errors.stream().map(BigQueryError::getMessage).collect(Collectors.toList()));
-      String reasons = COMMA_JOINER
-          .join(errors.stream().map(BigQueryError::getReason).collect(Collectors.toList()));
-      String locations = COMMA_JOINER
-          .join(errors.stream().map(BigQueryError::getLocation).collect(Collectors.toList()));
+      String messages = errorsToString(errors, BigQueryError::getMessage);
+      String reasons = errorsToString(errors, BigQueryError::getReason);
+      String locations = errorsToString(errors, BigQueryError::getLocation);
       LOG.debug(
           "<Auto_add_column> Handling Error when inserting record {}, Reasons : {}, Messages : {}, Locations: {}",
           record.getHeader().getSourceId(), reasons, messages, locations);
@@ -430,6 +466,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
         handleInsertError(tableId, record, messages, reasons);
       }
     });
+  }
+
+  private String errorsToString(List<BigQueryError> errors,
+      Function<? super BigQueryError, ? extends String> function) {
+    return COMMA_JOINER.join(errors.stream().map(function).collect(Collectors.toList()));
   }
 
   private Result addMissingColumnsInBigQuery(TableId tableId, Record record, int retry) {
