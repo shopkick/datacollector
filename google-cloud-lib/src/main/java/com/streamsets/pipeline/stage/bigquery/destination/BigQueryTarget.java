@@ -203,7 +203,7 @@ public class BigQueryTarget extends BaseTarget {
 		InsertAllResponse response = bigQuery.insertAll(request);
 		if (response.hasErrors()) {
 		  if(handleErrors) {
-			handleInsertErrors(tableId, elVars, requestIndexToRecords, response);
+			handleInsertErrors(tableId, elVars, requestIndexToRecords, request, response);
 		  }
 		  else {
 			reportErrors(tableId, requestIndexToRecords, response);
@@ -225,7 +225,7 @@ public class BigQueryTarget extends BaseTarget {
 		}
   }
 
-  protected void handleInsertErrors(TableId tableId, ELVars elVars, Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
+  protected void handleInsertErrors(TableId tableId, ELVars elVars, Map<Long, Record> requestIndexToRecords, InsertAllRequest request, InsertAllResponse response) {
 	reportErrors(tableId, requestIndexToRecords, response);
   }
 

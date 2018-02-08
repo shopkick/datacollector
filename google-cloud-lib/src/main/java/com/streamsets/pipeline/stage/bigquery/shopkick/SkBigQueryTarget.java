@@ -38,24 +38,32 @@ import com.streamsets.pipeline.stage.bigquery.destination.BigQueryTargetConfig;
 import com.streamsets.pipeline.stage.bigquery.lib.Errors;
 
 public class SkBigQueryTarget extends BigQueryTarget {
-  private SkBigQueryTargetConfig conf;
-  private int maxWaitTimeForInsertMins;
+  private static final int INITIAL_ELAPSED_SEC = 0;
+  private int backoffMaxWaitTimeSec;
   private boolean retryForInsertErrors;
   private boolean autoAddColumns;
+  private boolean autoAddTable;
+  private boolean errorHandlingMode;
 
   public SkBigQueryTarget(SkBigQueryTargetConfig conf, BigQueryTargetConfig bqConf) {
     super(bqConf);
-    this.conf = conf;
-    this.autoAddColumns = InvalidColumnHandler.AUTO_ADD_COLUMNS.equals(conf.invalidColumnHandler)
-        && !bqConf.ignoreInvalidColumn;
-    this.maxWaitTimeForInsertMins = conf.maxWaitTimeForInsertMins;
-    this.retryForInsertErrors = conf.autoAddRetryHandler == AutoAddColRetryHandler.BLOCKING;
+
+    if (conf.modeHandler == ModeHandler.SCHEMA_DRIFT) {
+      this.autoAddColumns = InvalidColumnHandler.AUTO_ADD_COLUMNS.equals(conf.invalidColumnHandler)
+          && !bqConf.ignoreInvalidColumn;
+      this.retryForInsertErrors = conf.autoAddRetryHandler == AutoAddColRetryHandler.BLOCKING;
+      this.autoAddTable = conf.autoAddTable;
+      this.backoffMaxWaitTimeSec = conf.maxWaitTimeForInsertMins * 60;
+    } else if (conf.modeHandler == ModeHandler.ERROR_HANLDER) {
+      this.errorHandlingMode = true;
+      this.backoffMaxWaitTimeSec = conf.maxWaitTimeForInsertMins * 60;
+    }
   }
 
   @Override
   protected void handleTableNotFound(Record record, String datasetName, String tableName,
       Map<TableId, List<Record>> tableIdToRecords) {
-    if (!conf.autoAddTable) {
+    if (!autoAddTable) {
       super.handleTableNotFound(record, datasetName, tableName, null);
       return;
     }
@@ -91,7 +99,20 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   @Override
   protected void handleInsertErrors(TableId tableId, ELVars elVars,
-      Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
+      Map<Long, Record> requestIndexToRecords, InsertAllRequest request,
+      InsertAllResponse response) {
+    if (errorHandlingMode) {
+      if (isTimeoutError(requestIndexToRecords, response)) {
+        retryBatchForTimeoutError(tableId, requestIndexToRecords, request, response,
+            INITIAL_SLEEP_SEC, INITIAL_ELAPSED_SEC);
+        return;
+      } else {
+        retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request, INITIAL_SLEEP_SEC,
+            INITIAL_ELAPSED_SEC);
+        return;
+      }
+    }
+
     if (!autoAddColumns) {
       super.reportErrors(tableId, requestIndexToRecords, response);
       return;
@@ -108,7 +129,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
 
     if (!retry.isEmpty()) {
-      insertBatchAgain(tableId, elVars, retry, stopped);
+      retryBatchForSchemaDrift(tableId, elVars, retry, stopped);
     } else {
       if (!stopped.isEmpty()) {
         stopped.forEach(r -> super.handleInsertError(r.record, r.messages, r.reasons));
@@ -116,16 +137,90 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
   }
 
+  private void retryBatchForTimeoutError(TableId tableId, Map<Long, Record> requestIndexToRecords,
+      InsertAllRequest request, InsertAllResponse response, int sleepTimeSec, int elapsedSec) {
+
+    if (elapsedSec >= backoffMaxWaitTimeSec) {
+      super.reportErrors(tableId, requestIndexToRecords, response);
+      return;
+    }
+
+    InsertAllResponse retryResponse = null;
+    boolean retry = false;
+    try {
+      retryResponse = bigQuery.insertAll(request);
+      if (retryResponse.hasErrors()) {
+        if (!isTimeoutError(requestIndexToRecords, response)) {
+          super.reportErrors(tableId, requestIndexToRecords, response);
+          return;
+        } else {
+          retry = true;
+        }
+      }
+    } catch (BigQueryException e) {
+      if (e.isRetryable()) {
+        retry = true;
+      } else {
+        LOG.error(Errors.BIGQUERY_13.getMessage(), e);
+        // Put all records to error.
+        for (long i = 0; i < request.getRows().size(); i++) {
+          Record record = requestIndexToRecords.get(i);
+          getContext().toError(record, Errors.BIGQUERY_13, e);
+        }
+        return;
+      }
+    }
+    if (retry) {
+      sleep(sleepTimeSec);
+      retryBatchForTimeoutError(tableId, requestIndexToRecords, request, retryResponse,
+          sleepTimeSec + sleepTimeSec, elapsedSec + sleepTimeSec);
+    } else {
+      LOG.debug("Batch for table {} with size {} retried successfully", tableId,
+          requestIndexToRecords.size());
+    }
+  }
+
+  private boolean isTimeoutError(Map<Long, Record> requestIndexToRecords,
+      InsertAllResponse response) {
+    boolean isTimeOut = false;
+    if (response != null) {
+      Map<Long, List<BigQueryError>> insertErrors = response.getInsertErrors();
+      Set<Entry<Long, List<BigQueryError>>> entrySet = insertErrors.entrySet();
+      for (Entry<Long, List<BigQueryError>> entry : entrySet) {
+        Long requestIdx = entry.getKey();
+        List<BigQueryError> errors = entry.getValue();
+        Record record = requestIndexToRecords.get(requestIdx);
+        String messages = COMMA_JOINER
+            .join(errors.stream().map(BigQueryError::getMessage).collect(Collectors.toList()));
+        String reasons = COMMA_JOINER
+            .join(errors.stream().map(BigQueryError::getReason).collect(Collectors.toList()));
+        String locations = COMMA_JOINER
+            .join(errors.stream().map(BigQueryError::getLocation).collect(Collectors.toList()));
+        LOG.debug(
+            "<ERROR_HANDLER_RETRY> Handling Error retry for record {}, Reasons : {}, Messages : {}, Locations: {}",
+            record.getHeader().getSourceId(), reasons, messages, locations);
+        if (!REASON_TIMEOUT.equalsIgnoreCase(reasons)) {
+          LOG.debug("Unknown Reasons:Messages {}:{} to retry for record: {}", reasons, messages,
+              record.getHeader().getSourceId());
+          return false;
+        } else if (!isTimeOut) {
+          isTimeOut = true;
+        }
+      }
+    }
+    return isTimeOut;
+  }
+
   @Override
   protected void handleInsertError(TableId tableId, Record record, String messages,
       String reasons) {
-    if (reasons != null && reasons.contains(REASON_TIMEOUT)) {
+    if (reasons != null && reasons.contains(REASON_TIMEOUT) && !errorHandlingMode) {
       addRetryFlagInHeader(tableId, -1, record);
     }
     super.handleInsertError(record, messages, reasons);
   }
 
-  private void insertBatchAgain(TableId tableId, ELVars elVars, List<Record> retry,
+  private void retryBatchForSchemaDrift(TableId tableId, ELVars elVars, List<Record> retry,
       List<ErrorRecord> stopped) {
     Map<Long, Record> requestIndexToRecords = new HashMap<>();
     final AtomicLong index = new AtomicLong(0);
@@ -135,7 +230,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     addToInsertRequest(tableId, elVars, requestIndexToRecords, index, retry,
         insertAllRequestBuilder);
 
-    if (!stopped.isEmpty()) {
+    if (stopped != null && !stopped.isEmpty()) {
       addToInsertRequest(tableId, elVars, requestIndexToRecords, index,
           stopped.stream().map(e -> e.record).collect(Collectors.toList()),
           insertAllRequestBuilder);
@@ -143,28 +238,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
     InsertAllRequest req = insertAllRequestBuilder.build();
 
-    insertAllWithRetries(requestIndexToRecords, elVars, tableId, req, 1, 0);
+    retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, req, INITIAL_SLEEP_SEC,
+        INITIAL_ELAPSED_SEC);
   }
 
-  private void addMissingColumnsInBigQuery(TableId tableId, List<Record> retry,
-      List<ErrorRecord> missingCols) {
-    missingCols.forEach(err -> {
-      Result added = addMissingColumnsInBigQuery(tableId, err.record, 0);
-      if (added.result) {
-        retry.add(err.record);
-      } else {
-        LOG.debug(added.message);
-        setErrorAttribute(ERR_BQ_AUTO_ADD_COLUMNS, err.record, added.message);
-        super.handleInsertError(err.record, err.messages, err.reasons);
-      }
-    });
-  }
-
-  private void insertAllWithRetries(Map<Long, Record> requestIndexToRecords, ELVars elVars,
+  private void retryBatchForSchemaDrift(Map<Long, Record> requestIndexToRecords, ELVars elVars,
       TableId tableId, InsertAllRequest request, int sleepTimeSec, int elapsedSec) {
 
-    int elapsedMin = elapsedSec / NUM_SECS_IN_MIN;
-    if (elapsedMin >= maxWaitTimeForInsertMins) {
+    if (elapsedSec > backoffMaxWaitTimeSec) {
       LOG.info("Last retry for sending batch. Already Elapsed: {} Secs", elapsedSec);
       addRetryFlagInHeaders(tableId, requestIndexToRecords, -1);
       insertAll(requestIndexToRecords, elVars, tableId, request, false);
@@ -188,7 +269,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
               return;
             }
             sleep(sleepTimeSec);
-            insertAllWithRetries(requestIndexToRecords, elVars, tableId, request,
+            retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request,
                 sleepTimeSec + sleepTimeSec, elapsedSec + sleepTimeSec);
           } else {
             LOG.warn("Cannot insert after auto add, found unknown errors");
@@ -200,7 +281,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         }
       } catch (BigQueryException e) {
         LOG.error(Errors.BIGQUERY_13.getMessage(), e);
-        handleBigqueryException(tableId, requestIndexToRecords, e);
+        addRetryFlagIfApplicable(tableId, requestIndexToRecords, e);
         // Put all records to error.
         for (long i = 0; i < request.getRows().size(); i++) {
           Record record = requestIndexToRecords.get(i);
@@ -209,6 +290,21 @@ public class SkBigQueryTarget extends BigQueryTarget {
       }
     }
   }
+
+  private void addMissingColumnsInBigQuery(TableId tableId, List<Record> retry,
+      List<ErrorRecord> missingCols) {
+    missingCols.forEach(err -> {
+      Result added = addMissingColumnsInBigQuery(tableId, err.record, 0);
+      if (added.result) {
+        retry.add(err.record);
+      } else {
+        LOG.debug(added.message);
+        setErrorAttribute(ERR_BQ_AUTO_ADD_COLUMNS, err.record, added.message);
+        super.handleInsertError(err.record, err.messages, err.reasons);
+      }
+    });
+  }
+
 
   private void addRetryFlagInHeaders(TableId tableId, Map<Long, Record> requestIndexToRecords,
       int errorCode) {
@@ -220,7 +316,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   }
 
   private void addRetryFlagInHeader(TableId tableId, int errorCode, Record record) {
-    setErrorAttribute(ERR_ACTION, record, "retry");
+    setErrorAttribute(ERR_ACTION, record, RETRY);
     record.getHeader().setAttribute(BQ_TABLE_ID_DATASET, tableId.getDataset());
     record.getHeader().setAttribute(BQ_TABLE_ID_TABLE, tableId.getTable());
     if (errorCode != -1) {
@@ -231,11 +327,20 @@ public class SkBigQueryTarget extends BigQueryTarget {
   @Override
   protected void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
       InsertAllRequest request, BigQueryException e) {
-    handleBigqueryException(request.getTable(), requestIndexToRecords, e);
-    super.handleBigqueryException(requestIndexToRecords, request, e);
+    if (e.isRetryable()) {
+      if (errorHandlingMode) {
+        retryBatchForTimeoutError(request.getTable(), requestIndexToRecords, request, null,
+            INITIAL_SLEEP_SEC, INITIAL_ELAPSED_SEC);
+      } else {
+        addRetryFlagInHeaders(request.getTable(), requestIndexToRecords, e.getCode());
+        super.handleBigqueryException(requestIndexToRecords, request, e);
+      }
+    } else {
+      super.handleBigqueryException(requestIndexToRecords, request, e);
+    }
   }
 
-  private void handleBigqueryException(TableId tableId, Map<Long, Record> requestIndexToRecords,
+  private void addRetryFlagIfApplicable(TableId tableId, Map<Long, Record> requestIndexToRecords,
       BigQueryException e) {
     if (e.isRetryable()) {
       addRetryFlagInHeaders(tableId, requestIndexToRecords, e.getCode());
@@ -244,7 +349,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   private void sleep(int sleepTimeSec) {
     try {
-      LOG.info("Sleeping {} seconds before retrying the batch", sleepTimeSec);
+      LOG.info("Waiting {} ms before retrying the batch", sleepTimeSec);
       TimeUnit.SECONDS.sleep(sleepTimeSec);
     } catch (InterruptedException e) {
       LOG.info("Interrupted", e);
@@ -739,13 +844,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
   private static final int ERR_CODE_BAD_REQUEST = 400;
   private static final int ERR_CODE_DUPLICATE = 409;
-  private static final int NUM_SECS_IN_MIN = 60;
+  private static final int INITIAL_SLEEP_SEC = 1;
   private static final int RETRY_SLEEP_TIME_MS = 500;
   private static final int MAX_RETRIES = 3;
   private static final String REASON_STOPPED = "stopped";
   private static final String REASON_INVALID = "invalid";
   private static final String REASON_TIMEOUT = "timeout";
   private static final String NO_SUCH_FIELD = "no such field.";
+  private static final String RETRY = "retry";
 
   private static final int PARTITION_DATE_SUFFIX_LEN = 9;
   private static final char ARRAY_START_CHAR = '[';

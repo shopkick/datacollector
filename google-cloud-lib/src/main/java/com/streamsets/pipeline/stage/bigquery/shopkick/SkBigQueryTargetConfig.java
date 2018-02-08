@@ -2,6 +2,7 @@ package com.streamsets.pipeline.stage.bigquery.shopkick;
 
 import com.streamsets.pipeline.api.ConfigDef;
 import com.streamsets.pipeline.api.ConfigDefBean;
+import com.streamsets.pipeline.api.Dependency;
 import com.streamsets.pipeline.api.ValueChooserModel;
 import com.streamsets.pipeline.lib.el.RecordEL;
 import com.streamsets.pipeline.stage.lib.GoogleCloudCredentialsConfig;
@@ -46,6 +47,18 @@ public class SkBigQueryTargetConfig{
         elDefs = {RecordEL.class}
     )
     public String rowIdExpression;
+    
+    @ConfigDef(
+        required = true,
+        type = ConfigDef.Type.MODEL,
+        label = "Mode",
+        description = "The mode at which the BigQueryTarget will run",
+        defaultValue = "SCHEMA_DRIFT",
+        displayPosition = 40,
+        group = "BIGQUERY"
+    )
+    @ValueChooserModel(ModeHandlerValues.class)
+    public ModeHandler modeHandler = ModeHandler.SCHEMA_DRIFT;    
 
     @ConfigDef(
 	    required = false,
@@ -53,8 +66,10 @@ public class SkBigQueryTargetConfig{
 	    defaultValue = "true",
 	    label = "Auto Add Table",
 	    description = "If enabled, dynamically adds missing table in bigquery",
-	    displayPosition = 40,
-	    group = "BIGQUERY"
+	    displayPosition = 50,
+	    group = "BIGQUERY",
+        dependsOn = "modeHandler",
+        triggeredByValue = {"SCHEMA_DRIFT"}    	    
 	)
 	public boolean autoAddTable;	
 	  
@@ -64,8 +79,10 @@ public class SkBigQueryTargetConfig{
         label = "Invalid column Handling",
         description = "Handling method when an invalid column is detected",
         defaultValue = "AUTO_ADD_COLUMNS",
-        displayPosition = 50,
-        group = "BIGQUERY"
+        displayPosition = 60,
+        group = "BIGQUERY",
+        dependsOn = "modeHandler",
+        triggeredByValue = {"SCHEMA_DRIFT"}        
     )
     @ValueChooserModel(InvalidColumnHandlerValues.class)
     public InvalidColumnHandler invalidColumnHandler = InvalidColumnHandler.AUTO_ADD_COLUMNS;
@@ -76,29 +93,44 @@ public class SkBigQueryTargetConfig{
         label = "Auto Add Retry Handling",
         description = "Retry handling when insert call fails after adding columns to a table)",
         defaultValue = "NON_BLOCKING",
-        displayPosition = 60,
+        displayPosition = 70,
         group = "BIGQUERY",
         dependsOn = "invalidColumnHandler",
         triggeredByValue = {"AUTO_ADD_COLUMNS"}         
-        )
+    )
     @ValueChooserModel(AutoAddColRetryHandlerValues.class)
     public AutoAddColRetryHandler autoAddRetryHandler = AutoAddColRetryHandler.NON_BLOCKING;    
     
     @ConfigDef(
         required =  true,
         type = ConfigDef.Type.NUMBER,
-        defaultValue = "2",
-        label = "MaxWaitTime for Retries(min)",
-        description = "Bigquery insert API takes some time to refresh" +
-            " the new schema after a table update, typically 2 mins.",
-        displayPosition = 70,
+        defaultValue = "3",
+        label = "MaxWaitTime for Backoff Retries(seconds)",
+        description = "Maximum backoff retry time for insert failures" +
+            " due to timeout errors or schema drift.",
+        displayPosition = 80,
         group = "BIGQUERY",
         min = 0,
         max = 1440,
-        dependsOn = "autoAddRetryHandler",
-        triggeredByValue = {"BLOCKING"}        
-        )
-    public int maxWaitTimeForInsertMins = 2;      
+        dependencies = {
+            @Dependency(configName = "autoAddRetryHandler", triggeredByValues = "BLOCKING"),
+            @Dependency(configName = "modeHandler", triggeredByValues = "ERROR_HANLDER")
+        }        
+    )
+    public int maxWaitTimeForInsertMins = 3;
+    
+    @ConfigDef(
+        required = false,
+        type = ConfigDef.Type.BOOLEAN,
+        defaultValue = "true",
+        label = "Ignore Invalid Column",
+        description = "If enabled, field paths that cannot be mapped to columns will be ignored",
+        displayPosition = 90,
+        group = "BIGQUERY",
+        dependsOn = "modeHandler",
+        triggeredByValue = {"DEFAULT"}
+    )
+    public boolean ignoreInvalidColumn;
     
     @ConfigDef(
         required =  true,
@@ -107,7 +139,7 @@ public class SkBigQueryTargetConfig{
         label = "Table Cache size",
         description = "Configures the cache size for storing TableId entries." +
             " Use -1 for unlimited number of tableId entries in the cache.",
-        displayPosition = 80,
+        displayPosition = 100,
         group = "BIGQUERY",
         min = -1,
         max = Integer.MAX_VALUE

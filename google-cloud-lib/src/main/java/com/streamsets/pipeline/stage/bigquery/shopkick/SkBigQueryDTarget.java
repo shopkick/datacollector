@@ -29,24 +29,37 @@ public class SkBigQueryDTarget extends DTarget {
   }
 
   private BigQueryTargetConfig convert(SkBigQueryTargetConfig conf) {
-	BigQueryTargetConfig bqConf = new BigQueryTargetConfig();
-	bqConf.tableNameEL = conf.tableNameEL;
-	bqConf.datasetEL = conf.datasetEL;
-	bqConf.credentials = conf.credentials;
-	bqConf.maxCacheSize = conf.maxCacheSize;
-	bqConf.rowIdExpression = conf.rowIdExpression;
-	switch (conf.invalidColumnHandler) {
-	case AUTO_ADD_COLUMNS:
-	  bqConf.ignoreInvalidColumn = false;
-	  break;
-	case ERROR_INALID_COLUMNS:
-	  bqConf.ignoreInvalidColumn = false;
-	  break;
-	case IGNORE_INVALID_COLUMNS:
-	  bqConf.ignoreInvalidColumn = true;
-	  break;
-	default:
-	}
-	return bqConf;
+    BigQueryTargetConfig bqConf = new BigQueryTargetConfig();
+    bqConf.tableNameEL = conf.tableNameEL;
+    bqConf.datasetEL = conf.datasetEL;
+    bqConf.credentials = conf.credentials;
+    bqConf.maxCacheSize = conf.maxCacheSize;
+    bqConf.rowIdExpression = conf.rowIdExpression;
+
+    switch (conf.modeHandler) {
+
+      case SCHEMA_DRIFT:
+        switch (conf.invalidColumnHandler) {
+          case AUTO_ADD_COLUMNS:
+          case ERROR_INVALID_COLUMNS:
+            bqConf.ignoreInvalidColumn = false;
+            break;
+          case IGNORE_INVALID_COLUMNS:
+            bqConf.ignoreInvalidColumn = true;
+            break;
+          default:
+        }
+        break;
+      case ERROR_HANLDER:
+        bqConf.ignoreInvalidColumn = false;
+        break;
+      case DEFAULT:
+        bqConf.ignoreInvalidColumn = conf.ignoreInvalidColumn;
+        break;
+      default:
+        break;
+    }
+
+    return bqConf;
   }
 }

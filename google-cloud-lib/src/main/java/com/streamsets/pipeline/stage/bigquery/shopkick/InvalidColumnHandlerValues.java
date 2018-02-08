@@ -6,7 +6,7 @@ public class InvalidColumnHandlerValues extends BaseEnumChooserValues<InvalidCol
   public InvalidColumnHandlerValues() {
 	super(
 		InvalidColumnHandler.AUTO_ADD_COLUMNS, 
-		InvalidColumnHandler.ERROR_INALID_COLUMNS,
+		InvalidColumnHandler.ERROR_INVALID_COLUMNS,
 		InvalidColumnHandler.IGNORE_INVALID_COLUMNS);
   }
 }
