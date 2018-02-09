@@ -297,7 +297,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
       try {
         InsertAllResponse response = bigQuery.insertAll(request);
         if (response.hasErrors()) {
-
           List<ErrorRecord> stopped = new ArrayList<>();
           List<ErrorRecord> missingCols = new ArrayList<>();
           bucketizeErrors(tableId, requestIndexToRecords, response, stopped, missingCols, false);
@@ -349,6 +348,12 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   private void addRetryFlagInHeaders(TableId tableId, Map<Long, Record> requestIndexToRecords,
       int errorCode) {
+
+    if (errorHandlingMode) {
+      // No need to change the previous retry flag in case of error handling
+      return;
+    }
+
     Iterator<Entry<Long, Record>> iterator = requestIndexToRecords.entrySet().iterator();
     while (iterator.hasNext()) {
       Record record = iterator.next().getValue();
@@ -724,7 +729,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     }
     return tableInfo.toBuilder().setDescription(getDescription()).build();
   }
-  
+
   private static String getDescription() {
     return AUTO_ADDED_BY_STREAMSETS + Instant.now();
   }
@@ -793,7 +798,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     Type firstType = first.getType();
     if (Type.LIST_MAP.equals(firstType) || Type.MAP.equals(firstType)) {
       bqType = getBqTypeForMap(first, fieldName + "[0]");
-      if( bqType == null ) {
+      if (bqType == null) {
         return null;
       }
     } else if (DATA_TYPE_MAP.containsKey(firstType)) {
