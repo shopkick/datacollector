@@ -57,6 +57,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       this.backoffMaxWaitTimeSec = conf.maxWaitTimeForInsertMins * 60;
     } else if (conf.modeHandler == ModeHandler.ERROR_HANLDER) {
       this.errorHandlingMode = true;
+      this.retryForInsertErrors = true;
       this.backoffMaxWaitTimeSec = conf.maxWaitTimeForRetryMins * 60;
     }
   }
@@ -126,7 +127,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       retryBatchForSchemaDrift(tableId, elVars, retry, stopped);
     } else {
       if (!stopped.isEmpty()) {
-        stopped.forEach(r -> super.handleInsertError(r.record, r.messages, r.reasons));
+        stopped.forEach(r -> super.addToError(r.record, r.messages, r.reasons));
       }
     }
   }
@@ -137,20 +138,18 @@ public class SkBigQueryTarget extends BigQueryTarget {
     if (isTimeoutError(requestIndexToRecords, response)) {
       retryBatchForTimeoutError(tableId, requestIndexToRecords, request, response,
           INITIAL_SLEEP_SEC, INITIAL_ELAPSED_SEC);
+    } else if (isErrorDueToSchemaDrift(tableId, requestIndexToRecords, response)) {
+      retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request, INITIAL_SLEEP_SEC,
+          INITIAL_ELAPSED_SEC);
     } else {
-      if (isErrorDueToSchemaDrift(tableId, requestIndexToRecords, response)) {
-        retryBatchForSchemaDrift(requestIndexToRecords, elVars, tableId, request, INITIAL_SLEEP_SEC,
-            INITIAL_ELAPSED_SEC);
-      } else {
-        super.reportErrors(tableId, requestIndexToRecords, response);
-      }
+      super.reportErrors(tableId, requestIndexToRecords, response);
     }
   }
 
   private boolean isErrorDueToSchemaDrift(TableId tableId, Map<Long, Record> requestIndexToRecords,
       InsertAllResponse response) {
     Map<Long, List<BigQueryError>> insertErrors = response.getInsertErrors();
-    List<Record> newFieldsRecords = new ArrayList<>(); 
+    List<Record> newFieldsRecords = new ArrayList<>();
     for (Entry<Long, List<BigQueryError>> entry : insertErrors.entrySet()) {
       List<BigQueryError> errors = entry.getValue();
       String messages = errorsToString(errors, BigQueryError::getMessage);
@@ -175,7 +174,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
     // Table ID without partition suffix
     TableId tableIdOnly = TableId.of(tableId.getDataset(), tableName);
     Table table = bigQuery.getTable(tableIdOnly);
-    return newFieldsRecords.stream().allMatch(record -> getAllColumns(table, record).fields.isEmpty() );
+    return newFieldsRecords.stream()
+        .allMatch(record -> getAllColumns(table, record).fields.isEmpty());
   }
 
   private void retryBatchForTimeoutError(TableId tableId, Map<Long, Record> requestIndexToRecords,
@@ -237,7 +237,8 @@ public class SkBigQueryTarget extends BigQueryTarget {
         LOG.debug(
             "<ERROR_HANDLER_RETRY> Handling Error retry for record {}, Reasons : {}, Messages : {}, Locations: {}",
             record.getHeader().getSourceId(), reasons, messages, locations);
-        if (!REASON_TIMEOUT.equalsIgnoreCase(reasons)) {
+        if (!REASON_TIMEOUT.equalsIgnoreCase(reasons)
+            && !REASON_STOPPED.equalsIgnoreCase(reasons)) {
           LOG.debug("Unknown Reasons:Messages {}:{} to retry for record: {}", reasons, messages,
               record.getHeader().getSourceId());
           return false;
@@ -255,7 +256,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
     if (reasons != null && reasons.contains(REASON_TIMEOUT) && !errorHandlingMode) {
       addRetryFlagInHeader(tableId, -1, record);
     }
-    super.handleInsertError(record, messages, reasons);
+    super.addToError(record, messages, reasons);
   }
 
   private void retryBatchForSchemaDrift(TableId tableId, ELVars elVars, List<Record> retry,
@@ -339,7 +340,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       } else {
         LOG.debug(added.message);
         setErrorAttribute(ERR_BQ_AUTO_ADD_COLUMNS, err.record, added.message);
-        super.handleInsertError(err.record, err.messages, err.reasons);
+        super.addToError(err.record, err.messages, err.reasons);
       }
     });
   }
@@ -388,7 +389,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   private void sleep(int sleepTimeSec) {
     try {
-      LOG.info("Waiting {} ms before retrying the batch", sleepTimeSec);
+      LOG.info("Waiting {} seconds before retrying the batch", sleepTimeSec);
       TimeUnit.SECONDS.sleep(sleepTimeSec);
     } catch (InterruptedException e) {
       LOG.info("Interrupted", e);
@@ -781,14 +782,23 @@ public class SkBigQueryTarget extends BigQueryTarget {
       LOG.debug("List: {} empty, cannot determine data type. Cannot auto create", fieldName);
       return null;
     }
+
     Field first = values.get(0);
-    com.google.cloud.bigquery.Field.Type bqType = DATA_TYPE_MAP.get(first.getType());
-    if (bqType != null) {
-      return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder()
-          .setMode(Mode.REPEATED).build();
+    com.google.cloud.bigquery.Field.Type bqType = null;
+    Type firstType = first.getType();
+    if (Type.LIST_MAP.equals(firstType) || Type.MAP.equals(firstType)) {
+      bqType = getBqTypeForMap(first, fieldName + "[0]");
+      if( bqType == null ) {
+        return null;
+      }
+    } else if (DATA_TYPE_MAP.containsKey(firstType)) {
+      bqType = DATA_TYPE_MAP.get(firstType);
     } else {
       return null;
     }
+
+    return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().setMode(Mode.REPEATED)
+        .build();
   }
 
   /**
@@ -796,6 +806,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
    * field in record
    */
   private com.google.cloud.bigquery.Field getFieldForMap(Field ssField, String fieldName) {
+    com.google.cloud.bigquery.Field.Type bqType = getBqTypeForMap(ssField, fieldName);
+    if (bqType == null) {
+      return null;
+    }
+    return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
+  }
+
+  private com.google.cloud.bigquery.Field.Type getBqTypeForMap(Field ssField, String fieldName) {
     Map<String, Field> value = ssField.getValueAsMap();
 
     if (value == null || value.isEmpty()) {
@@ -818,9 +836,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
       }
       fields.add(bqField);
     }
-    com.google.cloud.bigquery.Field.Type bqType =
-        com.google.cloud.bigquery.Field.Type.record(fields);
-    return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
+    return com.google.cloud.bigquery.Field.Type.record(fields);
   }
 
   class Result {

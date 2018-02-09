@@ -242,10 +242,10 @@ public class BigQueryTarget extends BaseTarget {
   }
 
   protected void handleInsertError(TableId tableId, Record record, String messages, String reasons) {
-    handleInsertError(record, messages, reasons);
+    addToError(record, messages, reasons);
   }
   
-  protected void handleInsertError(Record record, String messages, String reasons) {
+  protected void addToError(Record record, String messages, String reasons) {
     getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
   }
 
