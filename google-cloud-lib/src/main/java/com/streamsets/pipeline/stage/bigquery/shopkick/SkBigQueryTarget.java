@@ -1,5 +1,6 @@
 package com.streamsets.pipeline.stage.bigquery.shopkick;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -611,7 +612,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
           continue;
         }
 
-        bqFieldNew = bqFieldNew.toBuilder().setDescription(AUTO_ADDED_BY_STREAMSETS).build();
+        bqFieldNew = bqFieldNew.toBuilder().setDescription(getDescription()).build();
         additional.add(bqFieldNew);
       }
     }
@@ -721,7 +722,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
     } else {
       tableInfo = TableInfo.newBuilder(tableId, StandardTableDefinition.of(schema)).build();
     }
-    return tableInfo;
+    return tableInfo.toBuilder().setDescription(getDescription()).build();
+  }
+  
+  private static String getDescription() {
+    return AUTO_ADDED_BY_STREAMSETS + Instant.now();
   }
 
   protected String extractTableName(String tableName) {
@@ -897,7 +902,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private static final String BQ_TABLE_ID_TABLE = "BQ_TABLE_ID_TABLE";
   private static final String BQ_TABLE_ID_DATASET = "BQ_TABLE_ID_DATASET";
   private static final String EMPTY = "";
-  private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets";
+  private static final String AUTO_ADDED_BY_STREAMSETS = "auto added by streamsets at ";
   private static final String OLD_SCHEMA_ERROR_SUFFIX = "missing in new schema";
   private static final int ERR_CODE_BAD_REQUEST = 400;
   private static final int ERR_CODE_DUPLICATE = 409;
