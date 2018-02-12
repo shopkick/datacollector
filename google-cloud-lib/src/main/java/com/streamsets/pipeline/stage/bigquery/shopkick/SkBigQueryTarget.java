@@ -182,27 +182,26 @@ public class SkBigQueryTarget extends BigQueryTarget {
   private void retryBatchForTimeoutError(TableId tableId, Map<Long, Record> requestIndexToRecords,
       InsertAllRequest request, InsertAllResponse response, int sleepTimeSec, int elapsedSec) {
 
-    if (elapsedSec >= backoffMaxWaitTimeSec) {
-      super.reportErrors(tableId, requestIndexToRecords, response);
-      return;
-    }
-
     InsertAllResponse retryResponse = null;
     boolean retry = false;
+    BigQueryException bigQueryException = null;
     try {
       retryResponse = bigQuery.insertAll(request);
       if (retryResponse.hasErrors()) {
-        if (!isTimeoutError(requestIndexToRecords, response)) {
-          super.reportErrors(tableId, requestIndexToRecords, response);
+        if (!isTimeoutError(requestIndexToRecords, retryResponse)) {
+          LOG.warn("<timeOutRetry> Not a timeout issue, sending batch to error");
+          super.reportErrors(tableId, requestIndexToRecords, retryResponse);
           return;
         } else {
           retry = true;
         }
       }
     } catch (BigQueryException e) {
+      bigQueryException = e;
       if (e.isRetryable()) {
         retry = true;
       } else {
+        LOG.warn("<timeOutRetry> Non-retryable exception, sending batch to error");
         LOG.error(Errors.BIGQUERY_13.getMessage(), e);
         // Put all records to error.
         for (long i = 0; i < request.getRows().size(); i++) {
@@ -213,11 +212,20 @@ public class SkBigQueryTarget extends BigQueryTarget {
       }
     }
     if (retry) {
+      if (elapsedSec >= backoffMaxWaitTimeSec) {
+        LOG.warn("<timeOutRetry> Already elapsed {} seconds, sending batch to error", elapsedSec);
+        if (bigQueryException != null) {
+          super.handleBigqueryException(requestIndexToRecords, request, bigQueryException);
+        } else {
+          super.reportErrors(tableId, requestIndexToRecords, retryResponse);
+        }
+        return;
+      }
       sleep(sleepTimeSec);
       retryBatchForTimeoutError(tableId, requestIndexToRecords, request, retryResponse,
           sleepTimeSec + sleepTimeSec, elapsedSec + sleepTimeSec);
     } else {
-      LOG.debug("Batch for table {} with size {} retried successfully", tableId,
+      LOG.debug("<timeOutRetry> Batch for table {} with size {} retried successfully", tableId,
           requestIndexToRecords.size());
     }
   }
