@@ -262,10 +262,16 @@ public class SkBigQueryTarget extends BigQueryTarget {
   @Override
   protected void handleInsertError(TableId tableId, Record record, String messages,
       String reasons) {
+    setTableIdAttributes(tableId, record);
     if (reasons != null && reasons.contains(REASON_TIMEOUT) && !errorHandlingMode) {
       addRetryFlagInHeader(tableId, -1, record);
     }
     super.addToError(record, messages, reasons);
+  }
+
+  private void setTableIdAttributes(TableId tableId, Record record) {
+    record.getHeader().setAttribute(BQ_TABLE_ID_DATASET, tableId.getDataset());
+    record.getHeader().setAttribute(BQ_TABLE_ID_TABLE, tableId.getTable());
   }
 
   private void retryBatchForSchemaDrift(TableId tableId, ELVars elVars, List<Record> retry,
@@ -371,8 +377,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
   private void addRetryFlagInHeader(TableId tableId, int errorCode, Record record) {
     setErrorAttribute(ERR_ACTION, record, RETRY);
-    record.getHeader().setAttribute(BQ_TABLE_ID_DATASET, tableId.getDataset());
-    record.getHeader().setAttribute(BQ_TABLE_ID_TABLE, tableId.getTable());
     if (errorCode != -1) {
       setErrorAttribute(ERR_BQ_ERROR_CODE, record, Integer.toString(errorCode));
     }
@@ -381,6 +385,14 @@ public class SkBigQueryTarget extends BigQueryTarget {
   @Override
   protected void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
       InsertAllRequest request, BigQueryException e) {
+    
+    if (requestIndexToRecords != null) {
+      TableId tableId = request.getTable();
+      requestIndexToRecords.values().forEach(record -> {
+        setTableIdAttributes(tableId, record);
+      });
+    }
+    
     if (e.isRetryable()) {
       if (errorHandlingMode) {
         retryBatchForTimeoutError(request.getTable(), requestIndexToRecords, request, null,
@@ -420,8 +432,6 @@ public class SkBigQueryTarget extends BigQueryTarget {
         if (rowContent.isEmpty()) {
           throw new OnRecordErrorException(record, Errors.BIGQUERY_14);
         }
-        record.getHeader().setAttribute(BQ_TABLE_ID_DATASET, tableId.getDataset());
-        record.getHeader().setAttribute(BQ_TABLE_ID_TABLE, tableId.getTable());
         requestIndexToRecords.put(index.getAndIncrement(), record);
         insertAllRequestBuilder.addRow(insertId, rowContent);
       } catch (OnRecordErrorException e) {
