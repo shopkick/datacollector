@@ -785,6 +785,11 @@ public class SkBigQueryTarget extends BigQueryTarget {
    * @param fieldPath
    */
   private com.google.cloud.bigquery.Field convertSsToBqField(Field field, String fieldName) {
+    if(field.getValue() == null) {
+      LOG.debug("Field {} value is null, unable to determine datatype", fieldName);
+      return null;
+    }
+    
     if (Type.LIST.equals(field.getType())) {
       return getFieldForList(field, fieldName);
     }
