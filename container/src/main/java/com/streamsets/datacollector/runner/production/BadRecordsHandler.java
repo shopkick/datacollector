@@ -15,6 +15,9 @@
  */
 package com.streamsets.datacollector.runner.production;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.streamsets.datacollector.restapi.bean.BeanHelper;
 import com.streamsets.datacollector.config.ErrorRecordPolicy;
 import com.streamsets.datacollector.main.RuntimeInfo;
 import com.streamsets.datacollector.record.RecordImpl;
@@ -31,10 +34,12 @@ import java.util.List;
 import java.util.Map;
 
 public class BadRecordsHandler {
+  private static final String SOURCE_RECORD = "sourceRecord";
   private final ErrorRecordPolicy errorRecordPolicy;
   private final RuntimeInfo runtimeInfo;
   private final String pipelineName;
   private final StageRuntime errorStage;
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   public BadRecordsHandler(
     ErrorRecordPolicy errorRecordPolicy,
@@ -110,6 +115,17 @@ public class BadRecordsHandler {
           case STAGE_RECORD:
             errorRecord = (RecordImpl) record;
             break;
+          case BOTH:
+            errorRecord = (RecordImpl) record;
+            RecordImpl sourceRecord =
+                (RecordImpl) ((RecordImpl) record).getHeader().getSourceRecord();
+            if (sourceRecord != null) {
+              String jsonString = toJsonString(sourceRecord);
+              if (jsonString != null) {
+                errorRecord.getHeader().setAttribute(SOURCE_RECORD, jsonString);
+              }
+            }
+            break;            
           default:
            throw new IllegalArgumentException("Uknown error record policy: " + errorRecordPolicy);
         }
@@ -120,5 +136,13 @@ public class BadRecordsHandler {
     }
     return badRecords;
   }
+  
+  private String toJsonString(Record record) {
+    try {
+      return MAPPER.writeValueAsString(BeanHelper.wrapRecord(record));
+    } catch (JsonProcessingException e) {
+      return null;
+    }
+  }  
 
 }

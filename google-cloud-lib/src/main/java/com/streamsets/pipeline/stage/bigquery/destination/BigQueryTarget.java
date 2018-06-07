@@ -62,7 +62,7 @@ import java.util.stream.IntStream;
 
 public class BigQueryTarget extends BaseTarget {
   private static final Logger LOG = LoggerFactory.getLogger(BigQueryTarget.class);
-  private static final Joiner COMMA_JOINER = Joiner.on(",");
+  protected static final Joiner COMMA_JOINER = Joiner.on(",");
 
   static final String YYYY_MM_DD = "yyyy-MM-dd";
   static final String HH_MM_SS_SSSSSS = "HH:mm:ss.SSSSSS";
@@ -74,13 +74,13 @@ public class BigQueryTarget extends BaseTarget {
 
   private final BigQueryTargetConfig conf;
 
-  private BigQuery bigQuery;
+  protected BigQuery bigQuery;
   private ELEval dataSetEval;
   private ELEval tableNameELEval;
   private ELEval rowIdELEval;
   private LoadingCache<TableId, Boolean> tableIdExistsCache;
 
-  BigQueryTarget(BigQueryTargetConfig conf) {
+  public BigQueryTarget(BigQueryTargetConfig conf) {
     this.conf = conf;
     this.dateFormat = createSimpleDateFormat(YYYY_MM_DD);
     this.timeFormat  = createSimpleDateFormat(HH_MM_SS_SSSSSS);
@@ -149,7 +149,7 @@ public class BigQueryTarget extends BaseTarget {
             List<Record> tableIdRecords = tableIdToRecords.computeIfAbsent(tableId, t -> new ArrayList<>());
             tableIdRecords.add(record);
           } else {
-            getContext().toError(record, Errors.BIGQUERY_17, datasetName, tableName, conf.credentials.projectId);
+            handleTableNotFound(record, datasetName, tableName, tableIdToRecords);
           }
         } catch (ELEvalException e) {
           LOG.error("Error evaluating DataSet/TableName EL", e);
@@ -189,52 +189,83 @@ public class BigQueryTarget extends BaseTarget {
         if (areThereRecordsToWrite.get()) {
           insertAllRequestBuilder.setIgnoreUnknownValues(conf.ignoreInvalidColumn);
           insertAllRequestBuilder.setSkipInvalidRows(false);
-
-          InsertAllRequest request = insertAllRequestBuilder.build();
-
-          if (!request.getRows().isEmpty()) {
-            try {
-              InsertAllResponse response = bigQuery.insertAll(request);
-              if (response.hasErrors()) {
-                response.getInsertErrors().forEach((requestIdx, errors) -> {
-                  Record record = requestIndexToRecords.get(requestIdx);
-                  String messages = COMMA_JOINER.join(
-                      errors.stream()
-                          .map(BigQueryError::getMessage)
-                          .collect(Collectors.toList())
-                  );
-                  String reasons = COMMA_JOINER.join(
-                      errors.stream()
-                          .map(BigQueryError::getReason)
-                          .collect(Collectors.toList())
-                  );
-                  LOG.error(
-                      "Error when inserting record {}, Reasons : {}, Messages : {}",
-                      record.getHeader().getSourceId(),
-                      reasons,
-                      messages
-                  );
-                  getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
-                });
-              }
-            } catch (BigQueryException e) {
-              LOG.error(Errors.BIGQUERY_13.getMessage(), e);
-              //Put all records to error.
-              for (long i = 0; i < request.getRows().size(); i++) {
-                Record record = requestIndexToRecords.get(i);
-                getContext().toError(record, Errors.BIGQUERY_13, e);
-              }
-            }
-          }
+          insertAll(requestIndexToRecords, elVars, tableId, insertAllRequestBuilder.build(), true);
         }
       });
     }
   }
+  
+  protected void insertAll(Map<Long, Record> requestIndexToRecords, ELVars elVars, TableId tableId,
+      InsertAllRequest request, boolean handleErrors) {
+
+    if (!request.getRows().isEmpty()) {
+      try {
+        InsertAllResponse response = bigQuery.insertAll(request);
+        if (response.hasErrors()) {
+          if (handleErrors) {
+            handleInsertErrors(tableId, elVars, requestIndexToRecords, request, response);
+          } else {
+            reportErrors(tableId, requestIndexToRecords, response);
+          }
+        }
+      } catch (BigQueryException e) {
+        handleBigqueryException(requestIndexToRecords, request, e);
+      }
+    }
+  }
+  
+  protected void handleBigqueryException(Map<Long, Record> requestIndexToRecords,
+      InsertAllRequest request, BigQueryException e) {
+    LOG.error(Errors.BIGQUERY_13.getMessage(), e);
+        // Put all records to error.
+        for (long i = 0; i < request.getRows().size(); i++) {
+          Record record = requestIndexToRecords.get(i);
+          getContext().toError(record, Errors.BIGQUERY_13, e);
+        }
+  }
+
+  protected void handleInsertErrors(TableId tableId, ELVars elVars, Map<Long, Record> requestIndexToRecords, InsertAllRequest request, InsertAllResponse response) {
+    reportErrors(tableId, requestIndexToRecords, response);
+  }
+
+  protected void reportErrors(TableId tableId, Map<Long, Record> requestIndexToRecords, InsertAllResponse response) {
+    response.getInsertErrors().forEach((requestIdx, errors) -> {
+      Record record = requestIndexToRecords.get(requestIdx);
+      String messages = COMMA_JOINER.join(errors.stream().map(BigQueryError::getMessage).collect(Collectors.toList()));
+      String reasons = COMMA_JOINER.join(errors.stream().map(BigQueryError::getReason).collect(Collectors.toList()));
+      String locations = COMMA_JOINER.join(errors.stream().map(BigQueryError::getLocation).collect(Collectors.toList()));
+      LOG.error("Error when inserting record {}, Reasons : {}, Messages : {}, Locations: {}", record.getHeader().getSourceId(),
+          reasons, messages, locations);
+      handleInsertError(tableId, record, messages, reasons);
+    });
+  }
+
+  protected void handleInsertError(TableId tableId, Record record, String messages, String reasons) {
+    addToError(record, messages, reasons);
+  }
+
+  protected void addToError(Record record, String messages, String reasons) {
+    getContext().toError(record, Errors.BIGQUERY_11, reasons, messages);
+  }
+
+  protected void handleTableNotFound(Record record, String datasetName, String tableName,
+      Map<TableId, List<Record>> tableIdToRecords) {
+    handleTableNotFound(record, datasetName, Errors.BIGQUERY_17, tableName, tableIdToRecords);
+  }
+
+  protected void handleTableNotFound(Record record, String datasetName, Errors errorCode,
+      String tableName, Map<TableId, List<Record>> tableIdToRecords) {
+    getContext().toError(record, errorCode, datasetName, tableName, conf.credentials.projectId);
+  }
+
+  protected void refreshTableIdExistsCache(TableId key) {
+    tableIdExistsCache.refresh(key);
+  }  
 
   /**
    * Evaluate and obtain the row id if the expression is present or return null.
    */
-  private String getInsertIdForRecord(ELVars elVars, Record record) throws OnRecordErrorException {
+  protected String getInsertIdForRecord(ELVars elVars, Record record) throws OnRecordErrorException {
     String recordId = null;
     RecordEL.setRecordInContext(elVars, record);
     try {
@@ -256,7 +287,7 @@ public class BigQueryTarget extends BaseTarget {
    * @param record record to be converted
    * @return Java row representation for the record
    */
-  private Map<String, Object> convertToRowObjectFromRecord(Record record) throws OnRecordErrorException {
+  protected Map<String, Object> convertToRowObjectFromRecord(Record record) throws OnRecordErrorException {
     Field rootField = record.get();
     Map<String, Object> rowObject = new LinkedHashMap<>();
     if (rootField.getType().isOneOf(Field.Type.MAP, Field.Type.LIST_MAP)) {
@@ -264,7 +295,7 @@ public class BigQueryTarget extends BaseTarget {
       for (Map.Entry<String, Field> fieldEntry : fieldMap.entrySet()) {
         Field field = fieldEntry.getValue();
         //Skip null value fields
-        if (field.getValue() != null){
+        if (includeField(field)){
           try {
             rowObject.put(fieldEntry.getKey(), getValueFromField("/" + fieldEntry.getKey(), field));
           } catch (IllegalArgumentException e) {
@@ -277,6 +308,10 @@ public class BigQueryTarget extends BaseTarget {
     }
     return rowObject;
   }
+  
+  protected boolean includeField(Field field) {
+    return field.getValue() != null;
+  }  
 
   /**
    * Convert the sdc Field to an object for row content
