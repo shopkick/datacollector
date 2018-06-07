@@ -20,7 +20,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @StageDef(
     // We're reusing upgrader for both ToErrorKinesisDTarget & KinesisDTarget, make sure that you
@@ -30,7 +30,7 @@ import com.streamsets.pipeline.configurablestage.DTarget;
     description = "Writes data to Amazon Kinesis",
     icon = "kinesis.png",
     upgrader = KinesisTargetUpgrader.class,
-    onlineHelpRefUrl = "index.html#Destinations/KinProducer.html#task_q2j_ml4_yr"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/KinProducer.html#task_q2j_ml4_yr"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle

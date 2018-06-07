@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.http.Groups;
 
 @StageDef(
@@ -31,10 +31,9 @@ import com.streamsets.pipeline.lib.http.Groups;
     icon = "httpclient.png",
     recordsByRef = true,
     upgrader = HttpProcessorUpgrader.class,
-    onlineHelpRefUrl = "index.html#Processors/HTTPClient.html#task_z54_1qr_fw"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/HTTPClient.html#task_z54_1qr_fw"
 )
 @HideConfigs(value = {
-    "conf.dataFormatConfig.compression",
     "conf.dataFormatConfig.jsonContent"
 })
 @ConfigGroups(Groups.class)

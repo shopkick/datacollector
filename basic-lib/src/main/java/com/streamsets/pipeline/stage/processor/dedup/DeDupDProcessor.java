@@ -24,7 +24,7 @@ import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 import java.util.List;
 
@@ -35,7 +35,7 @@ import java.util.List;
     icon="dedup.png",
     outputStreams = OutputStreams.class,
     execution = ExecutionMode.STANDALONE,
-    onlineHelpRefUrl = "index.html#Processors/RDeduplicator.html#task_ikr_c2f_zq"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/RDeduplicator.html#task_ikr_c2f_zq"
 )
 @ConfigGroups(Groups.class)
 @HideConfigs(onErrorRecord = true)

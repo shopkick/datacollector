@@ -22,14 +22,14 @@ import com.streamsets.pipeline.api.FieldSelectorModel;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 @StageDef(
     version = 1,
     label = "JSON Generator",
     description = "Serializes a field to a string field in JSON format",
     icon = "json.png",
-    onlineHelpRefUrl = "index.html#Processors/JSONGenerator.html#task_kgk_3w1_h1b"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/JSONGenerator.html#task_kgk_3w1_h1b"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

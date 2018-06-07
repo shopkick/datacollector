@@ -25,6 +25,8 @@ import com.streamsets.datacollector.config.ModelDefinition;
 import com.streamsets.datacollector.config.ModelType;
 import com.streamsets.datacollector.config.PipelineConfiguration;
 import com.streamsets.datacollector.config.PipelineDefinition;
+import com.streamsets.datacollector.config.PipelineFragmentConfiguration;
+import com.streamsets.datacollector.config.PipelineFragmentDefinition;
 import com.streamsets.datacollector.config.PipelineRulesDefinition;
 import com.streamsets.datacollector.config.RawSourceDefinition;
 import com.streamsets.datacollector.config.ServiceDefinition;
@@ -612,7 +614,7 @@ public class MockStages {
   }
 
   public static UserContext userContext() {
-    return new UserContext("test-user");
+    return new UserContext("test-user", false, false);
   }
 
   public static class MockStageLibraryTask implements StageLibraryTask {
@@ -654,6 +656,11 @@ public class MockStages {
     @Override
     public PipelineDefinition getPipeline() {
       return PipelineDefinition.getPipelineDef();
+    }
+
+    @Override
+    public PipelineFragmentDefinition getPipelineFragment() {
+      return PipelineFragmentDefinition.getPipelineFragmentDef();
     }
 
     @Override
@@ -759,7 +766,7 @@ public class MockStages {
           .build();
 
         ModelDefinition m = new ModelDefinition(ModelType.FIELD_SELECTOR_MULTI_VALUE, null, Collections.<String>emptyList(),
-          Collections.<String>emptyList(), null, null);
+          Collections.<String>emptyList(), null, null, null);
         ConfigDefinition stageReqField = new ConfigDefinition("stageRequiredFields", ConfigDef.Type.MODEL, "stageRequiredFields",
           "stageRequiredFields", null, false, "groupName", "stageRequiredFieldName", m, "", null, 0, Collections.<ElFunctionDefinition>emptyList(),
           Collections.<ElConstantDefinition>emptyList(), Long.MIN_VALUE, Long.MAX_VALUE, "text/plain", 0, Collections.<Class> emptyList(),
@@ -880,7 +887,7 @@ public class MockStages {
         List<ConfigDefinition> list = new ArrayList<>();
         list.add(regularConf);
         ModelDefinition modelDefinition = new ModelDefinition(ModelType.LIST_BEAN, null, Collections.<String>emptyList(),
-          Collections.<String>emptyList(), null, list);
+          Collections.<String>emptyList(), null, list, null);
 
         ConfigDefinition complexConf = new ConfigDefinition(
           "complexConfName", ConfigDef.Type.MODEL, "complexConfLabel", "complexConfDesc", null, true,
@@ -1190,6 +1197,192 @@ public class MockStages {
     pipelineConfiguration.setMetadata(metadata);
     return pipelineConfiguration;
   }
+
+  public static PipelineConfiguration createPipelineConfigSourceFragmentTarget() {
+    StageConfiguration processor = new StageConfigurationBuilder("p", "processorName")
+        .withInputLanes("s")
+        .withOutputLanes("p1")
+        .build();
+    StageConfiguration processor2 = new StageConfigurationBuilder("p2", "processorName")
+        .withInputLanes("p1")
+        .withOutputLanes("p")
+        .build();
+    PipelineFragmentConfiguration fragment = new PipelineFragmentConfiguration(
+        UUID.randomUUID(),
+        1,
+        1,
+        "random_title",
+        "random_id",
+        "random_fragment_instance_id",
+        "weird description",
+        null,
+        Arrays.asList(processor, processor2),
+        Collections.emptyMap(),
+        Collections.emptyList()
+    );
+    fragment.setFragmentInstanceId("fragment_01");
+
+    List<StageConfiguration> stages = new ArrayList<>();
+    StageConfiguration source = new StageConfigurationBuilder("s", "sourceName")
+        .withOutputLanes("s")
+        .build();
+    stages.add(source);
+
+    StageConfiguration fragmentProcessor =
+        new StageConfigurationBuilder("fp1", PipelineFragmentConfiguration.FRAGMENT_PROCESSOR_STAGE_NAME)
+            .withInputLanes("s")
+            .withOutputLanes("p")
+            .withConfig(
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_ID,
+                    fragment.getPipelineId()
+                ),
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_INSTANCE_ID,
+                    fragment.getFragmentInstanceId()
+                )
+            )
+            .build();
+    stages.add(fragmentProcessor);
+
+    StageConfiguration target = new StageConfigurationBuilder("t", "targetName")
+        .withInputLanes("p")
+        .build();
+    stages.add(target);
+
+    PipelineConfiguration pipelineConfiguration = new PipelineConfiguration(PipelineStoreTask.SCHEMA_VERSION,
+        PipelineConfigBean.VERSION,
+        "pipelineId",
+        UUID.randomUUID(),
+        "label",
+        null,
+        createPipelineConfigs(),
+        null,
+        Collections.singletonList(fragment),
+        stages,
+        getErrorStageConfig(),
+        getStatsAggregatorStageConfig(),
+        Collections.emptyList(),
+        Collections.emptyList()
+    );
+    Map<String, Object> metadata = new HashMap<>();
+    metadata.put("a", "A");
+    pipelineConfiguration.setMetadata(metadata);
+    return pipelineConfiguration;
+  }
+
+  public static PipelineConfiguration createPipelineConfigSourceFragmentInsideFragmentTarget() {
+    StageConfiguration processor2 = new StageConfigurationBuilder("p2", "processorName")
+        .withInputLanes("p2")
+        .withOutputLanes("p3")
+        .build();
+    PipelineFragmentConfiguration nestedFragment = new PipelineFragmentConfiguration(
+        UUID.randomUUID(),
+        1,
+        1,
+        "random_title",
+        "random_id",
+        "random_fragment_instance_id",
+        "weird description",
+        null,
+        Collections.singletonList(processor2),
+        Collections.emptyMap(),
+        Collections.emptyList()
+    );
+    nestedFragment.setFragmentInstanceId("nestedFragment_01");
+
+
+    StageConfiguration processor1 = new StageConfigurationBuilder("p1", "processorName")
+        .withInputLanes("p1")
+        .withOutputLanes("p2")
+        .build();
+
+    StageConfiguration fragmentProcessor =
+        new StageConfigurationBuilder("fp1", PipelineFragmentConfiguration.FRAGMENT_PROCESSOR_STAGE_NAME)
+            .withInputLanes("p2")
+            .withOutputLanes("p3")
+            .withConfig(
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_ID,
+                    nestedFragment.getPipelineId()
+                ),
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_INSTANCE_ID,
+                    nestedFragment.getFragmentInstanceId()
+                )
+            )
+            .build();
+
+    PipelineFragmentConfiguration fragment = new PipelineFragmentConfiguration(
+        UUID.randomUUID(),
+        1,
+        1,
+        "random_title",
+        "random_id",
+        "random_fragment_instance_id",
+        "weird description",
+        Collections.singletonList(nestedFragment),
+        ImmutableList.of(processor1, fragmentProcessor),
+        Collections.emptyMap(),
+        Collections.emptyList()
+    );
+    fragment.setFragmentInstanceId("fragment_01");
+
+
+    List<StageConfiguration> stages = new ArrayList<>();
+    StageConfiguration source = new StageConfigurationBuilder("s", "sourceName")
+        .withOutputLanes("s")
+        .build();
+    stages.add(source);
+
+    StageConfiguration target = new StageConfigurationBuilder("t", "targetName")
+        .withInputLanes("p3")
+        .build();
+    stages.add(target);
+    StageConfiguration processor3 = new StageConfigurationBuilder("p0", "processorName")
+        .withInputLanes("s")
+        .withOutputLanes("p1")
+        .build();
+    stages.add(processor3);
+
+    StageConfiguration fragmentProcessor2 =
+        new StageConfigurationBuilder("fp2", PipelineFragmentConfiguration.FRAGMENT_PROCESSOR_STAGE_NAME)
+            .withInputLanes("p1")
+            .withOutputLanes("p3")
+            .withConfig(
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_ID,
+                    fragment.getPipelineId()
+                ),
+                new Config(
+                    PipelineFragmentConfiguration.CONF_FRAGMENT_INSTANCE_ID,
+                    fragment.getFragmentInstanceId()
+                )
+            )
+            .build();
+    stages.add(fragmentProcessor2);
+
+    PipelineConfiguration pipelineConfiguration = new PipelineConfiguration(PipelineStoreTask.SCHEMA_VERSION,
+        PipelineConfigBean.VERSION,
+        "pipelineId",
+        UUID.randomUUID(),
+        "label",
+        null,
+        createPipelineConfigs(),
+        null,
+        Collections.singletonList(fragment),
+        stages,
+        getErrorStageConfig(),
+        getStatsAggregatorStageConfig(),
+        Collections.emptyList(),
+        Collections.emptyList()
+    );
+    Map<String, Object> metadata = new HashMap<>();
+    metadata.put("a", "A");
+    pipelineConfiguration.setMetadata(metadata);
+    return pipelineConfiguration;
+  }
+
 
   @SuppressWarnings("unchecked")
   public static PipelineConfiguration createPipelineConfigurationSourceTargetWithEventsOpen() {

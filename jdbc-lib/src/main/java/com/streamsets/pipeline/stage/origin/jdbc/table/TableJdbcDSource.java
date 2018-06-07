@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DPushSource;
+import com.streamsets.pipeline.api.base.configurablestage.DPushSource;
 import com.streamsets.pipeline.lib.jdbc.HikariPoolConfigBean;
 import com.streamsets.pipeline.stage.origin.jdbc.CommonSourceConfigBean;
 
@@ -36,7 +36,7 @@ import com.streamsets.pipeline.stage.origin.jdbc.CommonSourceConfigBean;
     resetOffset = true,
     producesEvents = true,
     upgrader = TableJdbcSourceUpgrader.class,
-    onlineHelpRefUrl = "index.html#Origins/MultiTableJDBCConsumer.html#task_kst_m4w_4y"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/MultiTableJDBCConsumer.html#task_kst_m4w_4y"
 )
 
 @ConfigGroups(value = Groups.class)

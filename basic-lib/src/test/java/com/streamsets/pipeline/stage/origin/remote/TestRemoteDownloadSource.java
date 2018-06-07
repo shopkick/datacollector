@@ -19,6 +19,7 @@ import com.github.fommil.ssh.SshRsaCrypto;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.Files;
+import com.streamsets.pipeline.api.EventRecord;
 import com.streamsets.pipeline.api.Field;
 import com.streamsets.pipeline.api.OnRecordError;
 import com.streamsets.pipeline.api.Record;
@@ -197,7 +198,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -231,7 +232,7 @@ public class TestRemoteDownloadSource {
             "*",
             1
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -272,7 +273,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -303,7 +304,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     try {
@@ -336,7 +337,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -371,7 +372,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -398,7 +399,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -425,7 +426,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -465,7 +466,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -529,7 +530,7 @@ public class TestRemoteDownloadSource {
               1000,
             "sloth.txt"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -567,7 +568,7 @@ public class TestRemoteDownloadSource {
               1000,
             "is-arvind-son-of-god.txt"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -597,7 +598,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -626,7 +627,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
 
@@ -672,7 +673,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -713,7 +714,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
 
@@ -756,7 +757,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .setOnRecordError(OnRecordError.TO_ERROR)
         .build();
@@ -827,7 +828,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .setOnRecordError(OnRecordError.TO_ERROR)
         .build();
@@ -890,7 +891,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .setOnRecordError(OnRecordError.DISCARD)
         .build();
@@ -934,7 +935,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .setOnRecordError(OnRecordError.DISCARD)
         .build();
@@ -1024,7 +1025,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1082,7 +1083,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1128,7 +1129,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     try {
@@ -1204,7 +1205,7 @@ public class TestRemoteDownloadSource {
             false,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     try {
@@ -1262,7 +1263,7 @@ public class TestRemoteDownloadSource {
     configBean.dataFormatConfig.filePatternInArchive = "testReadArchive/*.txt";
     RemoteDownloadSource origin =
         new RemoteDownloadSource(configBean);
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1410,7 +1411,7 @@ public class TestRemoteDownloadSource {
             true,
             "*"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     try {
@@ -1468,7 +1469,7 @@ public class TestRemoteDownloadSource {
     int totalRecordsRead = 0, runTimes = 0, expectedRecordCount = 10, totalRunTimes = expectedRecordCount * 2;
     String lastOffset = RemoteDownloadSource.NOTHING_READ;
     while (runTimes < totalRunTimes) {
-      SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+      SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
           .addOutputLane("lane")
           .build();
       runner.runInit();
@@ -1487,6 +1488,117 @@ public class TestRemoteDownloadSource {
   }
 
 
+  @Test
+  public void testEvents() throws Exception {
+    path = testFolder.getRoot().getAbsolutePath() + "/remote-download-source/testEvents";
+
+    Assert.assertTrue(new File(path).mkdirs());
+
+    Path filePath1 = Paths.get(path + "/testEvents1.txt");
+    Path filePath2 = Paths.get(path + "/testEvents2.txt");
+
+    byte[] sampleText = "This is sample text".getBytes();
+
+    java.nio.file.Files.write(filePath1, sampleText, StandardOpenOption.CREATE_NEW);
+    java.nio.file.Files.write(filePath2, sampleText, StandardOpenOption.CREATE_NEW);
+
+    setupSSHD(path, true);
+    RemoteDownloadSource origin =
+        new RemoteDownloadSource(getBean(
+            "sftp://localhost:" + String.valueOf(port) + "/",
+            true,
+            "testuser",
+            "pass",
+            null,
+            null,
+            null,
+            true,
+            DataFormat.TEXT,
+            null,
+            false,
+            "*"
+        ));
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
+        .addOutputLane("lane")
+        .build();
+    try {
+      runner.runInit();
+      StageRunner.Output output = runner.runProduce("", 10);
+      List<Record> records = output.getRecords().get("lane");
+      Assert.assertEquals(1, records.size());
+      Assert.assertEquals(2, runner.getEventRecords().size());
+      List<EventRecord> eventRecords = runner.getEventRecords();
+      Record newFileEvent = eventRecords.get(0);
+      Record finishedFileEvent = eventRecords.get(1);
+
+      Assert.assertEquals("new-file", newFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("finished-file", finishedFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("/" + filePath1.getFileName().toString(), newFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals("/" + filePath1.getFileName().toString(), finishedFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals(1, finishedFileEvent.get("/record-count").getValueAsLong());
+
+      runner.getEventRecords().clear();
+      output = runner.runProduce(output.getNewOffset(), 10);
+      records = output.getRecords().get("lane");
+      Assert.assertEquals(1, records.size());
+      Assert.assertEquals(2, runner.getEventRecords().size());
+      eventRecords = runner.getEventRecords();
+      newFileEvent = eventRecords.get(0);
+      finishedFileEvent = eventRecords.get(1);
+
+      Assert.assertEquals("new-file", newFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("finished-file", finishedFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("/" + filePath2.getFileName().toString(), newFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals("/" + filePath2.getFileName().toString(), finishedFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals(1, finishedFileEvent.get("/record-count").getValueAsLong());
+
+      runner.getEventRecords().clear();
+      output = runner.runProduce(output.getNewOffset(), 10);
+      records = output.getRecords().get("lane");
+      Assert.assertEquals(0, records.size());
+      Assert.assertEquals(1, runner.getEventRecords().size());
+      Record noMoreDataEventRecord = runner.getEventRecords().get(0);
+      Assert.assertEquals("no-more-data", noMoreDataEventRecord.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals(2, noMoreDataEventRecord.get("/record-count").getValueAsLong());
+      Assert.assertEquals(2, noMoreDataEventRecord.get("/file-count").getValueAsLong());
+
+      runner.getEventRecords().clear();
+      output = runner.runProduce(output.getNewOffset(), 10);
+      records = output.getRecords().get("lane");
+      Assert.assertEquals(0, records.size());
+      Assert.assertEquals(0, runner.getEventRecords().size());
+
+      Path filePath3 = Paths.get(path + "/testEvents3.txt");
+      java.nio.file.Files.write(filePath3, sampleText, StandardOpenOption.CREATE_NEW);
+
+      runner.getEventRecords().clear();
+      output = runner.runProduce(output.getNewOffset(), 10);
+      records = output.getRecords().get("lane");
+      Assert.assertEquals(1, records.size());
+      Assert.assertEquals(2, runner.getEventRecords().size());
+      eventRecords = runner.getEventRecords();
+      newFileEvent = eventRecords.get(0);
+      finishedFileEvent = eventRecords.get(1);
+      Assert.assertEquals("new-file", newFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("finished-file", finishedFileEvent.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals("/" + filePath3.getFileName().toString(), newFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals("/" + filePath3.getFileName().toString(), finishedFileEvent.get("/filepath").getValueAsString());
+      Assert.assertEquals(1, finishedFileEvent.get("/record-count").getValueAsLong());
+
+      runner.getEventRecords().clear();
+      output = runner.runProduce(output.getNewOffset(), 10);
+      records = output.getRecords().get("lane");
+      Assert.assertEquals(0, records.size());
+      Assert.assertEquals(1, runner.getEventRecords().size());
+      //Counters are reset, so we should have seen one file after the last no more data event
+      noMoreDataEventRecord = runner.getEventRecords().get(0);
+      Assert.assertEquals("no-more-data", noMoreDataEventRecord.getHeader().getAttribute("sdc.event.type"));
+      Assert.assertEquals(1, noMoreDataEventRecord.get("/record-count").getValueAsLong());
+      Assert.assertEquals(1, noMoreDataEventRecord.get("/file-count").getValueAsLong());
+    } finally {
+      runner.runDestroy();
+    }
+  }
   @Test
   public void testMockReset() throws Exception {
     path = testFolder.getRoot().getAbsolutePath() + "/remote-download-source/testMockReset";
@@ -1519,7 +1631,7 @@ public class TestRemoteDownloadSource {
             "*"
         ));
 
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1532,7 +1644,7 @@ public class TestRemoteDownloadSource {
       runner.runDestroy();
     }
 
-    runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1586,7 +1698,7 @@ public class TestRemoteDownloadSource {
             "*"
         ));
 
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1639,7 +1751,7 @@ public class TestRemoteDownloadSource {
             false,
             "??a"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();
@@ -1712,7 +1824,7 @@ public class TestRemoteDownloadSource {
             true,
             "??a"
         ));
-    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadSource.class, origin)
+    SourceRunner runner = new SourceRunner.Builder(RemoteDownloadDSource.class, origin)
         .addOutputLane("lane")
         .build();
     runner.runInit();

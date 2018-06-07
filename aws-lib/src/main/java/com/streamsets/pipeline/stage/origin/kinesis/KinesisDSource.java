@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DPushSource;
+import com.streamsets.pipeline.api.base.configurablestage.DPushSource;
 
 @StageDef(
     version = 6,
@@ -32,13 +32,13 @@ import com.streamsets.pipeline.configurablestage.DPushSource;
     recordsByRef = true,
     resetOffset = true,
     upgrader = KinesisSourceUpgrader.class,
-    onlineHelpRefUrl = "index.html#Origins/KinConsumer.html#task_p4b_vv4_yr"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/KinConsumer.html#task_p4b_vv4_yr"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle
 public class KinesisDSource extends DPushSource {
 
-  @ConfigDefBean(groups = {"KINESIS", "ADVANCED"})
+  @ConfigDefBean(groups = {"KINESIS", "LEASE_TABLE", "ADVANCED"})
   public KinesisConsumerConfigBean kinesisConfig;
 
   @Override

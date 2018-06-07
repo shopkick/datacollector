@@ -20,6 +20,8 @@ import com.streamsets.pipeline.api.ConfigDefBean;
 import com.streamsets.pipeline.api.ValueChooserModel;
 import com.streamsets.pipeline.config.TimeZoneChooserValues;
 import com.streamsets.pipeline.lib.el.TimeEL;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.UnsupportedFieldTypeChooserValues;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.UnsupportedFieldTypeValues;
 import com.streamsets.pipeline.stage.origin.jdbc.cdc.CDCSourceConfigBean;
 
 public class OracleCDCConfigBean {
@@ -211,9 +213,21 @@ public class OracleCDCConfigBean {
   @ConfigDef(
       required = true,
       type = ConfigDef.Type.BOOLEAN,
-      label = "Send Redo Query",
-      description = "Send the actual redo query returned by LogMiner in record headers",
+      label = "Parse SQL Query",
+      description = "Parse the SQL Query read from LogMiner into an SDC record. If set to false, the unparsed sql " +
+          "query is inserted into the /sql field",
       displayPosition = 150,
+      group = "CDC",
+      defaultValue = "true"
+  )
+  public boolean parseQuery;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.BOOLEAN,
+      label = "Send Redo Query in headers",
+      description = "Send the actual redo query returned by LogMiner in record headers",
+      displayPosition = 170,
       group = "CDC",
       defaultValue = "false"
   )
@@ -224,7 +238,7 @@ public class OracleCDCConfigBean {
       type = ConfigDef.Type.MODEL,
       label = "DB Time Zone",
       description = "Time Zone that the DB is operating in",
-      displayPosition = 160,
+      displayPosition = 180,
       group = "CDC"
   )
   @ValueChooserModel(TimeZoneChooserValues.class)

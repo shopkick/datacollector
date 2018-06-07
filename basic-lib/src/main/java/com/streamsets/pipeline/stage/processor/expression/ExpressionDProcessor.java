@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 import java.util.List;
 
@@ -32,7 +32,7 @@ import java.util.List;
     description="Performs calculations on a field-by-field basis",
     icon="expression.png",
     upgrader = ExpressionProcessorUpgrader.class,
-    onlineHelpRefUrl = "index.html#Processors/Expression.html#task_x2h_tv4_yq",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/Expression.html#task_x2h_tv4_yq",
     execution = {
         ExecutionMode.STANDALONE,
         ExecutionMode.CLUSTER_BATCH,

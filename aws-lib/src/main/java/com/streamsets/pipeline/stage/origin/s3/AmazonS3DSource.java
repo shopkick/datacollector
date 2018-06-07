@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Source;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DSource;
+import com.streamsets.pipeline.api.base.configurablestage.DSource;
 
 import static com.streamsets.pipeline.config.OriginAvroSchemaSource.SOURCE;
 
@@ -35,7 +35,7 @@ import static com.streamsets.pipeline.config.OriginAvroSchemaSource.SOURCE;
     resetOffset = true,
     producesEvents = true,
     upgrader = AmazonS3SourceUpgrader.class,
-    onlineHelpRefUrl = "index.html#Origins/AmazonS3.html#task_gfj_ssv_yq"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/AmazonS3.html#task_gfj_ssv_yq"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

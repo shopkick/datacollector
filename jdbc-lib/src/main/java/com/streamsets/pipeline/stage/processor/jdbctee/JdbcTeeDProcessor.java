@@ -24,7 +24,7 @@ import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.el.RecordEL;
 import com.streamsets.pipeline.lib.el.TimeEL;
 import com.streamsets.pipeline.lib.el.TimeNowEL;
@@ -46,7 +46,7 @@ import java.util.List;
     description = "Write records to JDBC and enrich records with generated columns",
     upgrader = JdbcTeeUpgrader.class,
     icon = "rdbms.png",
-    onlineHelpRefUrl = "index.html#Processors/JDBCTee.html#task_qpj_ncy_hw"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/JDBCTee.html#task_qpj_ncy_hw"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

@@ -63,17 +63,18 @@ import soql.SOQLParser;
 import javax.xml.namespace.QName;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
 
 public class ForceSource extends BaseSource {
   private static final long EVENT_ID_FROM_NOW = -1;
@@ -93,6 +94,7 @@ public class ForceSource extends BaseSource {
   private static final String ID = "Id";
   private static final String START_ROW = "startRow";
   private static final String RECORDS_NOT_FOUND = "Records not found for this query";
+  private static final String CONF_PREFIX = "conf";
 
   static final String READ_EVENTS_FROM_START = EVENT_ID_OFFSET_PREFIX + EVENT_ID_FROM_START;
 
@@ -110,6 +112,7 @@ public class ForceSource extends BaseSource {
   private CSVReader rdr;
   private List<String> resultHeader;
   private Set<String> processedBatches;
+  private BatchInfoList batchList;
 
   // SOAP API state
   private QueryResult queryResult;
@@ -153,6 +156,9 @@ public class ForceSource extends BaseSource {
   protected List<ConfigIssue> init() {
     // Validate configuration values and open any required resources.
     List<ConfigIssue> issues = super.init();
+    Optional
+        .ofNullable(conf.init(getContext(), CONF_PREFIX))
+        .ifPresent(issues::addAll);
 
     if (!conf.subscribeToStreaming && !conf.queryExistingData) {
       issues.add(
@@ -173,40 +179,42 @@ public class ForceSource extends BaseSource {
     }
 
     if (conf.queryExistingData) {
-      SOQLParser.StatementContext statementContext = ForceUtils.getStatementContext(conf.soqlQuery);
-      SOQLParser.ConditionExpressionsContext conditionExpressions = statementContext.conditionExpressions();
-      SOQLParser.FieldOrderByListContext fieldOrderByList = statementContext.fieldOrderByList();
-
       if (conf.usePKChunking) {
-        if (fieldOrderByList != null) {
-          issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
-              ForceConfigBean.CONF_PREFIX + "soqlQuery", Errors.FORCE_31
-          ));
-        }
-
-        if (conditionExpressions != null
-            && checkConditionExpressions(conditionExpressions, ID)) {
-          issues.add(getContext().createConfigIssue(
-            Groups.QUERY.name(),
-            ForceConfigBean.CONF_PREFIX + "soqlQuery", Errors.FORCE_32
-          ));
-        }
-
-        if (conf.repeatQuery == ForceRepeatQuery.INCREMENTAL) {
-          issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
-              ForceConfigBean.CONF_PREFIX + "repeatQuery", Errors.FORCE_33
-          ));
-        }
-
         conf.offsetColumn = ID;
-      } else {
-        if (conditionExpressions == null
-            || !checkConditionExpressions(conditionExpressions, conf.offsetColumn)
-            || fieldOrderByList == null
-            || !checkFieldOrderByList(fieldOrderByList, conf.offsetColumn)) {
-          issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
-              ForceConfigBean.CONF_PREFIX + "soqlQuery", Errors.FORCE_07, conf.offsetColumn
-          ));
+      }
+
+      if (!conf.disableValidation) {
+        SOQLParser.StatementContext statementContext = ForceUtils.getStatementContext(conf.soqlQuery);
+        SOQLParser.ConditionExpressionsContext conditionExpressions = statementContext.conditionExpressions();
+        SOQLParser.FieldOrderByListContext fieldOrderByList = statementContext.fieldOrderByList();
+
+        if (conf.usePKChunking) {
+          if (fieldOrderByList != null) {
+            issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
+                ForceConfigBean.CONF_PREFIX + "soqlQuery", Errors.FORCE_31
+            ));
+          }
+
+          if (conditionExpressions != null && checkConditionExpressions(conditionExpressions, ID)) {
+            issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
+                ForceConfigBean.CONF_PREFIX + "soqlQuery",
+                Errors.FORCE_32
+            ));
+          }
+
+          if (conf.repeatQuery == ForceRepeatQuery.INCREMENTAL) {
+            issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
+                ForceConfigBean.CONF_PREFIX + "repeatQuery", Errors.FORCE_33
+            ));
+          }
+        } else {
+          if (conditionExpressions == null || !checkConditionExpressions(conditionExpressions,
+              conf.offsetColumn
+          ) || fieldOrderByList == null || !checkFieldOrderByList(fieldOrderByList, conf.offsetColumn)) {
+            issues.add(getContext().createConfigIssue(Groups.QUERY.name(),
+                ForceConfigBean.CONF_PREFIX + "soqlQuery", Errors.FORCE_07, conf.offsetColumn
+            ));
+          }
         }
       }
     }
@@ -216,6 +224,9 @@ public class ForceSource extends BaseSource {
         ConnectorConfig partnerConfig = ForceUtils.getPartnerConfig(conf, new ForceSessionRenewer());
 
         partnerConnection = new PartnerConnection(partnerConfig);
+        if (conf.mutualAuth.useMutualAuth) {
+          ForceUtils.setupMutualAuth(partnerConfig, conf.mutualAuth);
+        }
 
         bulkConnection = ForceUtils.getBulkConnection(partnerConfig, conf);
 
@@ -232,7 +243,7 @@ public class ForceSource extends BaseSource {
             ));
           }
         }
-      } catch (ConnectionException | AsyncApiException | StageException e) {
+      } catch (ConnectionException | AsyncApiException | StageException | URISyntaxException e) {
         LOG.error("Error connecting: {}", e);
         issues.add(getContext().createConfigIssue(Groups.FORCE.name(),
             ForceConfigBean.CONF_PREFIX + "authEndpoint",
@@ -283,6 +294,11 @@ public class ForceSource extends BaseSource {
 
     if (issues.isEmpty()) {
       recordCreator = buildRecordCreator();
+      try {
+        recordCreator.init();
+      } catch (StageException e) {
+        issues.add(getContext().createConfigIssue(null, null, Errors.FORCE_34, e));
+      }
     }
 
     // If issues is not empty, the UI will inform the user of each configuration issue in the list.
@@ -320,7 +336,7 @@ public class ForceSource extends BaseSource {
       if (conf.subscriptionType == SubscriptionType.PUSH_TOPIC) {
         return new PushTopicRecordCreator(getContext(), conf, sobjectType);
       } else {
-        return new PlatformEventRecordCreator(getContext(), conf.platformEvent);
+        return new PlatformEventRecordCreator(getContext(), conf.platformEvent, conf);
       }
     }
 
@@ -358,6 +374,10 @@ public class ForceSource extends BaseSource {
       } else {
         LOG.info("Queue was empty at shutdown. No data lost.");
       }
+    }
+
+    if (recordCreator != null) {
+      recordCreator.destroy();
     }
 
     // Clean up any open resources.
@@ -471,8 +491,7 @@ public class ForceSource extends BaseSource {
     // We started the job already, see if the results are ready
     // Loop here so that we can wait for results in preview mode and not return an empty batch
     // Preview will cut us off anyway if we wait too long
-    BatchInfoList batchList = null;
-    while (queryResultList == null && job != null) {
+    while (queryResultList == null) {
       if (destroyed.get()) {
         throw new StageException(getContext().isPreview() ? Errors.FORCE_25 : Errors.FORCE_26);
       }
@@ -878,7 +897,7 @@ public class ForceSource extends BaseSource {
           throws AsyncApiException {
     JobInfo job = new JobInfo();
     job.setObject(sobjectType);
-    job.setOperation(conf.queryAll ? OperationEnum.queryAll : OperationEnum.query);
+    job.setOperation((conf.queryAll && !conf.usePKChunking) ? OperationEnum.queryAll : OperationEnum.query);
     job.setContentType(ContentType.CSV);
     if (conf.usePKChunking) {
       String headerValue = CHUNK_SIZE + "=" + conf.chunkSize;

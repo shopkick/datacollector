@@ -177,8 +177,7 @@ public class ManagerResource {
 
       PipelineState pipelineState = manager.getPipelineState(pipelineId, rev);
 
-      if (pipelineState.getExecutionMode() == ExecutionMode.SLAVE ||
-          pipelineState.getExecutionMode() == ExecutionMode.EDGE) {
+      if (pipelineState.getExecutionMode() == ExecutionMode.SLAVE) {
         throw new PipelineException(
             ContainerError.CONTAINER_01601,
             pipelineId,
@@ -188,14 +187,7 @@ public class ManagerResource {
 
       try {
         Runner runner = manager.getRunner(pipelineId, rev);
-
-        if (runtimeParameters != null && !runtimeParameters.isEmpty()) {
-          Utils.checkState(runner.getState().getExecutionMode() == ExecutionMode.STANDALONE,
-              Utils.format("Using runtime constants is not supported in {} mode", runner.getState().getExecutionMode()));
-          runner.start(user, runtimeParameters);
-        } else {
-          runner.start(user);
-        }
+        runner.start(user, runtimeParameters);
         return Response.ok()
             .type(MediaType.APPLICATION_JSON)
             .entity(BeanHelper.wrapPipelineState(runner.getState())).build();
@@ -239,8 +231,7 @@ public class ManagerResource {
 
         PipelineState pipelineState = manager.getPipelineState(pipelineId, "0");
 
-        if (pipelineState.getExecutionMode() == ExecutionMode.SLAVE ||
-            pipelineState.getExecutionMode() == ExecutionMode.EDGE) {
+        if (pipelineState.getExecutionMode() == ExecutionMode.SLAVE) {
           errorMessages.add(Utils.format(
               ContainerError.CONTAINER_01601.getMessage(),
               pipelineId,
@@ -526,16 +517,14 @@ public class ManagerResource {
     RestAPIUtils.injectPipelineInMDC(pipelineInfo.getTitle(), pipelineInfo.getPipelineId());
     if(pipelineId != null) {
       PipelineState pipelineState = manager.getPipelineState(pipelineId, rev);
-      if (pipelineState.getExecutionMode() != ExecutionMode.EDGE) {
-        Runner runner = manager.getRunner(pipelineId, rev);
-        if (runner != null && runner.getState().getStatus().isActive()) {
-          return Response.ok().type(MediaType.APPLICATION_JSON).entity(runner.getMetrics()).build();
-        }
-        if (runner != null) {
-          LOG.debug("Status is " + runner.getState().getStatus());
-        } else {
-          LOG.debug("Runner is null");
-        }
+      Runner runner = manager.getRunner(pipelineId, rev);
+      if (runner != null && runner.getState().getStatus().isActive()) {
+        return Response.ok().type(MediaType.APPLICATION_JSON).entity(runner.getMetrics()).build();
+      }
+      if (runner != null) {
+        LOG.debug("Status is " + runner.getState().getStatus());
+      } else {
+        LOG.debug("Runner is null");
       }
     }
     return Response.noContent().build();
@@ -659,10 +648,12 @@ public class ManagerResource {
     RestAPIUtils.injectPipelineInMDC(pipelineInfo.getTitle(), pipelineInfo.getPipelineId());
     Runner runner = manager.getRunner(pipelineId, rev);
     if(runner != null) {
-      return Response.ok().type(MediaType.APPLICATION_JSON).entity(
-        BeanHelper.wrapSnapshotInfoNewAPI(runner.getSnapshot(snapshotName).getInfo())).build();
+      final SnapshotInfoJson snapshot = BeanHelper.wrapSnapshotInfoNewAPI(runner.getSnapshot(snapshotName).getInfo());
+      if (snapshot != null) {
+        return Response.ok().type(MediaType.APPLICATION_JSON).entity(snapshot).build();
+      }
     }
-    return Response.noContent().build();
+    return Response.status(Response.Status.NOT_FOUND).build();
   }
 
   @Path("/pipeline/{pipelineId}/snapshot/{snapshotName}")

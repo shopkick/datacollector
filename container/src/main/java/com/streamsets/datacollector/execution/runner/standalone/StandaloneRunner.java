@@ -50,6 +50,7 @@ import com.streamsets.datacollector.execution.runner.common.Constants;
 import com.streamsets.datacollector.execution.runner.common.DataObserverRunnable;
 import com.streamsets.datacollector.execution.runner.common.MetricObserverRunnable;
 import com.streamsets.datacollector.execution.runner.common.PipelineRunnerException;
+import com.streamsets.datacollector.execution.runner.common.ProduceEmptyBatchesForIdleRunnersRunnable;
 import com.streamsets.datacollector.execution.runner.common.ProductionObserver;
 import com.streamsets.datacollector.execution.runner.common.ProductionPipeline;
 import com.streamsets.datacollector.execution.runner.common.ProductionPipelineBuilder;
@@ -82,6 +83,7 @@ import com.streamsets.datacollector.validation.Issue;
 import com.streamsets.datacollector.validation.ValidationError;
 import com.streamsets.dc.execution.manager.standalone.ResourceManager;
 import com.streamsets.dc.execution.manager.standalone.ThreadUsage;
+import com.streamsets.lib.security.http.RemoteSSOService;
 import com.streamsets.pipeline.api.ErrorListener;
 import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.Record;
@@ -367,7 +369,7 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
   private void retryOrStart(String user) throws PipelineException, StageException {
     PipelineState pipelineState = getState();
     if (pipelineState.getRetryAttempt() == 0) {
-      prepareForStart(user);
+      prepareForStart(user, runtimeParameters);
       start(user, runtimeParameters);
     } else {
       validateAndSetStateTransition(user, PipelineStatus.RETRY, "Changing the state to RETRY on startup", null);
@@ -721,7 +723,7 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
   }
 
   @Override
-  public void prepareForStart(String user) throws PipelineStoreException, PipelineRunnerException {
+  public void prepareForStart(String user, Map<String, Object> attributes) throws PipelineStoreException, PipelineRunnerException {
     PipelineState fromState = getState();
     checkState(VALID_TRANSITIONS.get(fromState.getStatus()).contains(PipelineStatus.STARTING), ContainerError.CONTAINER_0102,
         fromState.getStatus(), PipelineStatus.STARTING);
@@ -730,7 +732,7 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
       throw new PipelineRunnerException(ContainerError.CONTAINER_0166, name);
     }
     LOG.info("Preparing to start pipeline '{}::{}'", name, rev);
-    validateAndSetStateTransition(user, PipelineStatus.STARTING, null, null);
+    validateAndSetStateTransition(user, PipelineStatus.STARTING, null, attributes);
     token = UUID.randomUUID().toString();
   }
 
@@ -762,7 +764,13 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
     synchronized (this) {
       try {
         LOG.info("Starting pipeline {} {}", name, rev);
-        UserContext runningUser = new UserContext(user);
+        UserContext runningUser = new UserContext(user,
+            runtimeInfo.isDPMEnabled(),
+            configuration.get(
+                RemoteSSOService.DPM_USER_ALIAS_NAME_ENABLED,
+                RemoteSSOService.DPM_USER_ALIAS_NAME_ENABLED_DEFAULT
+            )
+        );
       /*
        * Implementation Notes: --------------------- What are the different threads and runnables created? - - - - - - - -
        * - - - - - - - - - - - - - - - - - - - RulesConfigLoader ProductionObserver MetricObserver
@@ -824,6 +832,8 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
         observerRunnable = objectGraph.get(DataObserverRunnable.class);
         metricsEventRunnable = objectGraph.get(MetricsEventRunnable.class);
 
+        ImmutableList.Builder<Future<?>> taskBuilder = ImmutableList.builder();
+
         ProductionObserver productionObserver = (ProductionObserver) objectGraph.get(Observer.class);
         RulesConfigLoader rulesConfigLoader = objectGraph.get(RulesConfigLoader.class);
         RulesConfigLoaderRunnable rulesConfigLoaderRunnable = objectGraph.get(RulesConfigLoaderRunnable.class);
@@ -875,9 +885,13 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
         int refreshInterval = configuration.get(MetricsEventRunnable.REFRESH_INTERVAL_PROPERTY,
             MetricsEventRunnable.REFRESH_INTERVAL_PROPERTY_DEFAULT);
         if(refreshInterval > 0) {
-          metricsFuture =
-              runnerExecutor.scheduleAtFixedRate(metricsEventRunnable, 0, metricsEventRunnable.getScheduledDelay(),
-                  TimeUnit.MILLISECONDS);
+          metricsFuture = runnerExecutor.scheduleAtFixedRate(
+            metricsEventRunnable,
+            0,
+            metricsEventRunnable.getScheduledDelay(),
+            TimeUnit.MILLISECONDS
+          );
+          taskBuilder.add(metricsFuture);
         }
         //Schedule Rules Config Loader
         rulesConfigLoader.setStatsQueue(statsQueue);
@@ -886,30 +900,52 @@ public class StandaloneRunner extends AbstractRunner implements StateListener {
         } catch (InterruptedException e) {
           throw new PipelineRuntimeException(ContainerError.CONTAINER_0403, name, e.toString(), e);
         }
-        ScheduledFuture<?> configLoaderFuture =
-            runnerExecutor.scheduleWithFixedDelay(rulesConfigLoaderRunnable, 1, RulesConfigLoaderRunnable.SCHEDULED_DELAY,
-                TimeUnit.SECONDS);
+        ScheduledFuture<?> configLoaderFuture = runnerExecutor.scheduleWithFixedDelay(
+          rulesConfigLoaderRunnable,
+          1,
+          RulesConfigLoaderRunnable.SCHEDULED_DELAY,
+          TimeUnit.SECONDS
+        );
+        taskBuilder.add(configLoaderFuture);
 
-        ScheduledFuture<?> metricObserverFuture = runnerExecutor.scheduleWithFixedDelay(metricObserverRunnable, 1, 2,
-            TimeUnit.SECONDS);
+        ScheduledFuture<?> metricObserverFuture = runnerExecutor.scheduleWithFixedDelay(
+          metricObserverRunnable,
+          1,
+          2,
+          TimeUnit.SECONDS
+        );
+        taskBuilder.add(metricObserverFuture);
+
+        // Schedule a task to run empty batches for idle runners
+        if(pipelineConfigBean.runnerIdleTIme > 0) {
+          ProduceEmptyBatchesForIdleRunnersRunnable idleRunnersRunnable = new ProduceEmptyBatchesForIdleRunnersRunnable(
+            runner,
+            pipelineConfigBean.runnerIdleTIme * 1000 // The value inside the runnable is in milliseconds whereas user config is in seconds
+          );
+
+          // We'll schedule the task to run every 1/10 of the interval (really an arbitrary number)
+          long period = (pipelineConfigBean.runnerIdleTIme * 1000 )/ 10;
+
+          ScheduledFuture<?> idleRunnersFuture = runnerExecutor.scheduleWithFixedDelay(
+            idleRunnersRunnable,
+            period,
+            period,
+            TimeUnit.MILLISECONDS
+          );
+          taskBuilder.add(idleRunnersFuture);
+        }
 
         // update checker
         updateChecker = new UpdateChecker(runtimeInfo, configuration, pipelineConfiguration, this);
         ScheduledFuture<?> updateCheckerFuture = runnerExecutor.scheduleAtFixedRate(updateChecker, 1, 24 * 60, TimeUnit.MINUTES);
+        taskBuilder.add(updateCheckerFuture);
 
         observerRunnable.setRequestQueue(productionObserveRequests);
         observerRunnable.setStatsQueue(statsQueue);
         Future<?> observerFuture = runnerExecutor.submit(observerRunnable);
+        taskBuilder.add(observerFuture);
 
-        List<Future<?>> list;
-        if (metricsFuture != null) {
-          list =
-              ImmutableList
-                  .of(configLoaderFuture, observerFuture, metricObserverFuture, metricsFuture, updateCheckerFuture);
-        } else {
-          list = ImmutableList.of(configLoaderFuture, observerFuture, metricObserverFuture, updateCheckerFuture);
-        }
-        pipelineRunnable = new ProductionPipelineRunnable(threadHealthReporter, this, prodPipeline, name, rev, list);
+        pipelineRunnable = new ProductionPipelineRunnable(threadHealthReporter, this, prodPipeline, name, rev, taskBuilder.build());
       } catch (Exception e) {
         validateAndSetStateTransition(user, PipelineStatus.START_ERROR, e.toString(), null);
         throw e;

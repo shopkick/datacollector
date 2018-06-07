@@ -262,26 +262,22 @@
       <directory>${basedir}/../${cdh_5_13-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
+    <fileSet>
+      <directory>${basedir}/../${cdh_5_14-lib}/target/streamsets-libs/</directory>
+      <outputDirectory>/streamsets-libs/</outputDirectory>
+    </fileSet>
 
     <!-- CDH Spark Kafka lib -->
     <fileSet>
-      <directory>${basedir}/../${cdh_5_8-cluster-cdh_kafka_2_0-lib}/target/streamsets-libs/</directory>
+      <directory>${basedir}/../${cdh-spark_2_1-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
     <fileSet>
-      <directory>${basedir}/../${cdh_5_9-cluster-cdh_kafka_2_0-lib}/target/streamsets-libs/</directory>
+      <directory>${basedir}/../${cdh-spark_2_2-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
     <fileSet>
-      <directory>${basedir}/../${cdh_5_10-cluster-cdh_kafka_2_1-lib}/target/streamsets-libs/</directory>
-      <outputDirectory>/streamsets-libs/</outputDirectory>
-    </fileSet>
-    <fileSet>
-      <directory>${basedir}/../${cdh_5_11-cluster-cdh_kafka_2_1-lib}/target/streamsets-libs/</directory>
-      <outputDirectory>/streamsets-libs/</outputDirectory>
-    </fileSet>
-    <fileSet>
-      <directory>${basedir}/../${cdh_5_12-cluster-cdh_kafka_2_1-lib}/target/streamsets-libs/</directory>
+      <directory>${basedir}/../${cdh-spark_2_3-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
 
@@ -354,6 +350,14 @@
       <directory>${basedir}/../${apache-kudu_1_5-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
+    <fileSet>
+      <directory>${basedir}/../${apache-kudu_1_6-lib}/target/streamsets-libs/</directory>
+      <outputDirectory>/streamsets-libs/</outputDirectory>
+    </fileSet>
+    <fileSet>
+      <directory>${basedir}/../${apache-kudu_1_7-lib}/target/streamsets-libs/</directory>
+      <outputDirectory>/streamsets-libs/</outputDirectory>
+    </fileSet>
 
     <!-- Apache Kafka libs -->
     <fileSet>
@@ -403,6 +407,13 @@
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
 
+    <!-- Aerospike -->
+    <fileSet>
+        <directory>${basedir}/../aerospike-lib/target/streamsets-libs/</directory>
+        <outputDirectory>/streamsets-libs/</outputDirectory>
+    </fileSet>
+
+
     <!-- CDH5 Kafka libs -->
     <fileSet>
       <directory>${basedir}/../${cdh_kafka_2_0-lib}/target/streamsets-libs/</directory>
@@ -451,8 +462,12 @@
     </fileSet>
 
     <!-- Kinetica libs -->
-    <fileSet>
+     <fileSet>
       <directory>${basedir}/../${kinetica_6_0-lib}/target/streamsets-libs/</directory>
+      <outputDirectory>/streamsets-libs/</outputDirectory>
+    </fileSet>
+    <fileSet>
+      <directory>${basedir}/../${kinetica_6_1-lib}/target/streamsets-libs/</directory>
       <outputDirectory>/streamsets-libs/</outputDirectory>
     </fileSet>
 

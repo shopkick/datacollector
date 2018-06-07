@@ -22,14 +22,14 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.PipelineLifecycleStage;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DExecutor;
+import com.streamsets.pipeline.api.base.configurablestage.DExecutor;
 
 @StageDef(
     version = 1,
     label = "Spark Executor",
     description = "Run Spark Applications",
     icon = "spark-logo-hd.png",
-    onlineHelpRefUrl = "index.html#Executors/Spark.html#task_cdw_wxb_1z",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Executors/Spark.html#task_cdw_wxb_1z",
     producesEvents = true
 )
 @ConfigGroups(Groups.class)

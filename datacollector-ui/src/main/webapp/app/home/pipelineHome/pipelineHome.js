@@ -101,6 +101,10 @@ angular
       canWrite: false,
       canExecute: false,
       isDPMPipelineDirty: false,
+      fragmentsScope: {
+        containsFragments: false,
+        fragmentsExpanded: false
+      },
 
       /**
        * Add New Pipeline Configuration
@@ -135,6 +139,7 @@ angular
         var relativeYPos = options.relativeYPos;
         var configuration = options.configuration;
         var insertBetweenEdge = options.insertBetweenEdge;
+        var producingEventsConfigValue = options.producingEventsConfigValue;
         var stageInstance;
         var edges = $scope.edges;
         var edge;
@@ -151,7 +156,7 @@ angular
 
         if (stage.type === pipelineConstant.SOURCE_STAGE_TYPE) {
           var sourceExists = false;
-          angular.forEach($scope.pipelineConfig.stages, function (sourceStageInstance) {
+          angular.forEach($scope.stageInstances, function (sourceStageInstance) {
             if (sourceStageInstance.uiInfo.stageType === pipelineConstant.SOURCE_STAGE_TYPE) {
               sourceExists = true;
             }
@@ -180,6 +185,10 @@ angular
           configuration: configuration,
           insertBetweenEdge: insertBetweenEdge
         });
+
+        if (producingEventsConfigValue) {
+          stageInstance.eventLanes = [stageInstance.instanceName + '_EventLane'];
+        }
 
         $scope.changeStageSelection({
           selectedObject: stageInstance,
@@ -486,7 +495,6 @@ angular
        */
       startMonitoring: function() {
         refreshPipelineMetrics();
-        //initializeAlertWebSocket();
       },
 
       /**
@@ -515,7 +523,7 @@ angular
         var startEventStage = $scope.pipelineConfig.startEventStages[0];
         var stopEventStage = $scope.pipelineConfig.stopEventStages[0];
 
-        angular.forEach($scope.pipelineConfig.stages, function (stageInstance) {
+        angular.forEach($scope.stageInstances, function (stageInstance) {
           if (stageInstance.instanceName === stageInstanceName) {
             instance = stageInstance;
           }
@@ -551,7 +559,7 @@ angular
         var msg = issue.message;
 
         if (issue.configName) {
-          var stageInstance = _.find($scope.pipelineConfig.stages, function (stage) {
+          var stageInstance = _.find($scope.stageInstances, function (stage) {
             return stage.instanceName === stageInstanceName;
           });
 
@@ -660,7 +668,6 @@ angular
        * Delete Triggered Alert
        */
       deleteTriggeredAlert: function(triggeredAlert, event) {
-
         if (event) {
           event.preventDefault();
           event.stopPropagation();
@@ -756,6 +763,16 @@ angular
       clearTabSelectionCache: function() {
         $scope.selectedDetailPaneTabCache = {};
         $scope.selectedConfigGroupCache = {};
+      },
+
+      expandAllFragments: function () {
+        $scope.fragmentsScope.fragmentsExpanded = true;
+        $scope.refreshGraph();
+      },
+
+      collapseAllFragments: function () {
+        $scope.fragmentsScope.fragmentsExpanded = false;
+        $scope.refreshGraph();
       }
     });
 
@@ -813,9 +830,10 @@ angular
 
         $rootScope.common.pipelineStatusMap = pipelineStatusMap;
 
-        return $q.all([api.pipelineAgent.getPipelineConfig(routeParamPipelineName),
-          api.pipelineAgent.getPipelineRules(routeParamPipelineName),
-          api.pipelineAgent.getPipelineMetrics(routeParamPipelineName, 0)]);
+        return $q.all([
+          api.pipelineAgent.getPipelineConfig(routeParamPipelineName),
+          api.pipelineAgent.getPipelineRules(routeParamPipelineName)
+        ]);
       },function(resp) {
         $scope.showLoading = false;
         $rootScope.common.errors = [resp.data];
@@ -828,16 +846,32 @@ angular
           var rules = results[1].data;
           var clickedAlert = $rootScope.common.clickedAlert;
 
-          $rootScope.common.pipelineMetrics = results[2].data;
-          if (_.contains(['RUNNING', 'STARTING'], $rootScope.common.pipelineStatusMap[routeParamPipelineName].status)) {
-            refreshPipelineMetrics();
-          }
+          api.pipelineAgent.getPipelineMetrics(routeParamPipelineName, 0)
+            .then(
+              function(res) {
+                $rootScope.common.pipelineMetrics = res.data;
+              }
+            );
 
           if ($rootScope.common.pipelineStatusMap[routeParamPipelineName].status === 'RETRY') {
             updateRetryCountdown($rootScope.common.pipelineStatusMap[routeParamPipelineName].nextRetryTimeStamp);
           }
 
+          if (config.fragments && config.fragments.length) {
+            // Pipeline contains fragments - so mark it readonly
+            $scope.isPipelineReadOnly = true;
+
+            $scope.fragmentsScope = {
+              containsFragments: true,
+              fragmentsExpanded: true
+            };
+          }
+
           updateGraph(config, rules, undefined, undefined, true);
+
+          if (_.contains(['RUNNING', 'STARTING'], $rootScope.common.pipelineStatusMap[routeParamPipelineName].status)) {
+            refreshPipelineMetrics();
+          }
 
           if (clickedAlert && clickedAlert.pipelineName === $scope.activeConfigInfo.pipelineId) {
             var edges = $scope.edges,
@@ -1129,38 +1163,46 @@ angular
       });
       $scope.executionMode = executionModeConfig.value;
 
+      if ($scope.executionMode === 'EDGE') {
+        isWebSocketSupported = false;
+      }
+
       $scope.sources = _.filter($scope.stageLibraries, function (stageLibrary) {
         return stageLibrary.type === pipelineConstant.SOURCE_STAGE_TYPE &&
           stageLibrary.library !== 'streamsets-datacollector-stats-lib' &&
-          stageLibrary.executionModes.indexOf($scope.executionMode) !== -1;
+          stageLibrary.name.indexOf('_fragment_') === -1 &&
+          ($scope.executionMode !== 'EDGE' || stageLibrary.executionModes.indexOf($scope.executionMode) !== -1);
       });
 
       $scope.processors = _.filter($scope.stageLibraries, function (stageLibrary) {
         return stageLibrary.type === pipelineConstant.PROCESSOR_STAGE_TYPE &&
           stageLibrary.library !== 'streamsets-datacollector-stats-lib' &&
-          stageLibrary.executionModes.indexOf($scope.executionMode) !== -1;
+          stageLibrary.name.indexOf('_fragment_') === -1 &&
+          ($scope.executionMode !== 'EDGE' || stageLibrary.executionModes.indexOf($scope.executionMode) !== -1);
       });
 
       $scope.executors = _.filter($scope.stageLibraries, function (stageLibrary) {
         return (stageLibrary.type === pipelineConstant.EXECUTOR_STAGE_TYPE &&
           stageLibrary.library !== 'streamsets-datacollector-stats-lib') &&
-          stageLibrary.executionModes.indexOf($scope.executionMode) !== -1;
+          stageLibrary.name.indexOf('_fragment_') === -1 &&
+          ($scope.executionMode !== 'EDGE' || stageLibrary.executionModes.indexOf($scope.executionMode) !== -1);
       });
 
       $scope.targets = _.filter($scope.stageLibraries, function (stageLibrary) {
         return (stageLibrary.type === pipelineConstant.TARGET_STAGE_TYPE &&
           !stageLibrary.errorStage && !stageLibrary.statsAggregatorStage  &&
           stageLibrary.library !== 'streamsets-datacollector-stats-lib') &&
-          stageLibrary.executionModes.indexOf($scope.executionMode) !== -1;
+          stageLibrary.name.indexOf('_fragment_') === -1 &&
+          ($scope.executionMode !== 'EDGE' || stageLibrary.executionModes.indexOf($scope.executionMode) !== -1);
       });
 
-      //Initialize the pipeline config
+      // Initialize the pipeline config
       if (!$scope.pipelineConfig.uiInfo || _.isEmpty($scope.pipelineConfig.uiInfo)) {
         $scope.pipelineConfig.uiInfo = {
           previewConfig : {
             previewSource: pipelineConstant.CONFIGURED_SOURCE,
             batchSize: 10,
-            timeout: 10000,
+            timeout: 30000,
             writeToDestinations: false,
             executeLifecycleEvents: false,
             showHeader: false,
@@ -1169,6 +1211,15 @@ angular
           }
         };
       }
+
+      var stageInstances = [];
+      if (pipelineConfig.fragments && pipelineConfig.fragments.length && $scope.fragmentsScope.fragmentsExpanded) {
+        stageInstances = pipelineService.ProcessFragmentStages(pipelineConfig);
+      } else {
+        stageInstances = pipelineConfig.stages;
+      }
+
+      $scope.stageInstances = stageInstances;
 
       // Initialize metadata for label support
       if (!$scope.pipelineConfig.metadata || _.isEmpty($scope.pipelineConfig.metadata)) {
@@ -1181,22 +1232,24 @@ angular
         var statsAggregatorStageConfig = _.find($scope.pipelineConfig.configuration, function (c) {
           return c.name === 'statsAggregatorStage';
         });
-        statsAggregatorStageConfig.value = "streamsets-datacollector-basic-lib::" +
-                 "com_streamsets_pipeline_stage_destination_devnull_StatsNullDTarget::1";
+        if (statsAggregatorStage) {
+          statsAggregatorStageConfig.value = "streamsets-datacollector-basic-lib::" +
+            "com_streamsets_pipeline_stage_destination_devnull_StatsNullDTarget::1";
+        }
       }
 
       //Determine edges from input lanes and output lanes
       //And also set flag sourceExists if pipeline Config contains source
       edges = [];
       $scope.sourceExists = false;
-      angular.forEach($scope.pipelineConfig.stages, function (sourceStageInstance) {
+      angular.forEach($scope.stageInstances, function (sourceStageInstance) {
         if (sourceStageInstance.uiInfo.stageType === pipelineConstant.SOURCE_STAGE_TYPE) {
           $scope.sourceExists = true;
         }
 
         if (sourceStageInstance.outputLanes && sourceStageInstance.outputLanes.length) {
           angular.forEach(sourceStageInstance.outputLanes, function (outputLane) {
-            angular.forEach($scope.pipelineConfig.stages, function (targetStageInstance) {
+            angular.forEach($scope.stageInstances, function (targetStageInstance) {
               if (targetStageInstance.inputLanes && targetStageInstance.inputLanes.length &&
                 _.contains(targetStageInstance.inputLanes, outputLane)) {
                 edges.push({
@@ -1211,7 +1264,7 @@ angular
 
         if (sourceStageInstance.eventLanes && sourceStageInstance.eventLanes.length) {
           angular.forEach(sourceStageInstance.eventLanes, function (eventLane) {
-            angular.forEach($scope.pipelineConfig.stages, function (targetStageInstance) {
+            angular.forEach($scope.stageInstances, function (targetStageInstance) {
               if (targetStageInstance.inputLanes && targetStageInstance.inputLanes.length &&
                 _.contains(targetStageInstance.inputLanes, eventLane)) {
                 edges.push({
@@ -1253,7 +1306,7 @@ angular
           $scope.selectedType = pipelineConstant.PIPELINE;
         } else if ($scope.selectedType === pipelineConstant.STAGE_INSTANCE) {
           //In case of detail pane is stage instance
-          angular.forEach($scope.pipelineConfig.stages, function (stageInstance) {
+          angular.forEach($scope.stageInstances, function (stageInstance) {
             if (stageInstance.instanceName === $scope.detailPaneConfig.instanceName) {
               selectedStageInstance = stageInstance;
             }
@@ -1263,6 +1316,15 @@ angular
             $scope.detailPaneConfig = $scope.selectedObject = selectedStageInstance;
             $scope.stageSelected = true;
             $scope.selectedType = pipelineConstant.STAGE_INSTANCE;
+
+            // Re-crate list of services where each item have both the definition and actual configuration values
+            $scope.detailPaneServices = [];
+            _.each($scope.detailPaneConfig.services, function(serviceConfig) {
+              var service = {};
+              service.definition = pipelineService.getServiceDefinition(serviceConfig.service);
+              service.config = serviceConfig;
+              $scope.detailPaneServices.push(service);
+            });
           } else {
             $scope.detailPaneConfig = $scope.selectedObject = $scope.pipelineConfig;
             $scope.detailPaneConfigDefn = $scope.pipelineConfigDefinition;
@@ -1346,7 +1408,7 @@ angular
         }
 
         $scope.$broadcast('updateGraph', {
-          nodes: $scope.pipelineConfig.stages,
+          nodes: $scope.stageInstances,
           edges: edges,
           issues: issuesMap,
           selectNode: ($scope.selectedType && $scope.selectedType === pipelineConstant.STAGE_INSTANCE) ? $scope.selectedObject : undefined,
@@ -1553,7 +1615,7 @@ angular
           metricsWebSocket.close();
         }
 
-        //WebSocket to get Pipeline Metrics
+        // WebSocket to get Pipeline Metrics
         metricsWebSocket = new WebSocket(webSocketMetricsURL);
 
         metricsWebSocket.onmessage = function (evt) {
@@ -1615,7 +1677,7 @@ angular
         pipelineMetrics = $rootScope.common.pipelineMetrics;
 
       if (pipelineMetrics && pipelineMetrics.meters) {
-        angular.forEach($scope.pipelineConfig.stages, function(stageInstance) {
+        angular.forEach($scope.stageInstances, function(stageInstance) {
           var errorRecordsMeter = pipelineMetrics.meters['stage.' + stageInstance.instanceName + '.errorRecords.meter'],
             stageErrorsMeter = pipelineMetrics.meters['stage.' + stageInstance.instanceName + '.stageErrors.meter'];
 
@@ -1978,14 +2040,16 @@ angular
 
 
     $scope.$on('onPasteNode', function (event, stageInstance) {
-      var stageLibraries = $scope.stageLibraries,
-        newStage = _.find(stageLibraries, function(stage) {
-          return stage.library === stageInstance.library && stage.name === stageInstance.stageName;
-        });
+      var stageLibraries = $scope.stageLibraries;
+      var newStage = _.find(stageLibraries, function (stage) {
+        return stage.library === stageInstance.library && stage.name === stageInstance.stageName;
+      });
+      var producingEventsConfigValue = (stageInstance.eventLanes && stageInstance.eventLanes.length > 0);
 
       $scope.addStageInstance({
         stage: newStage,
-        configuration: angular.copy(stageInstance.configuration)
+        configuration: angular.copy(stageInstance.configuration),
+        producingEventsConfigValue: producingEventsConfigValue
       });
     });
 

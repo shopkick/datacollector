@@ -20,6 +20,7 @@ import com.streamsets.datacollector.config.ConfigDefinition;
 import com.streamsets.datacollector.config.CredentialStoreDefinition;
 import com.streamsets.datacollector.config.LineagePublisherDefinition;
 import com.streamsets.datacollector.config.PipelineDefinition;
+import com.streamsets.datacollector.config.PipelineFragmentDefinition;
 import com.streamsets.datacollector.config.PipelineRulesDefinition;
 import com.streamsets.datacollector.config.ServiceDefinition;
 import com.streamsets.datacollector.config.StageDefinition;
@@ -89,6 +90,11 @@ public class PreviewStageLibraryTask extends TaskWrapper implements StageLibrary
   }
 
   @Override
+  public PipelineFragmentDefinition getPipelineFragment() {
+    return library.getPipelineFragment();
+  }
+
+  @Override
   public PipelineRulesDefinition getPipelineRules() {
     return library.getPipelineRules();
   }
@@ -100,27 +106,27 @@ public class PreviewStageLibraryTask extends TaskWrapper implements StageLibrary
 
   @Override
   public List<LineagePublisherDefinition> getLineagePublisherDefinitions() {
-    return Collections.emptyList();
+    return library.getLineagePublisherDefinitions();
   }
 
   @Override
   public LineagePublisherDefinition getLineagePublisherDefinition(String library, String name) {
-    return null;
+    return this.library.getLineagePublisherDefinition(library, name);
   }
 
   @Override
   public List<CredentialStoreDefinition> getCredentialStoreDefinitions() {
-    return Collections.emptyList();
+    return library.getCredentialStoreDefinitions();
   }
 
   @Override
   public List<ServiceDefinition> getServiceDefinitions() {
-    return Collections.emptyList();
+    return library.getServiceDefinitions();
   }
 
   @Override
   public ServiceDefinition getServiceDefinition(Class serviceInterface, boolean forExecution) {
-    return null;
+    return library.getServiceDefinition(serviceInterface, forExecution);
   }
 
   @Override
@@ -146,7 +152,7 @@ public class PreviewStageLibraryTask extends TaskWrapper implements StageLibrary
 
   @Override
   public List<ClasspathValidatorResult> validateStageLibClasspath() {
-    return Collections.emptyList();
+    return library.validateStageLibClasspath();
   }
 
   @Override

@@ -20,8 +20,8 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.config.TimeZoneChooserValues;
-import com.streamsets.pipeline.configurablestage.DProcessor;
 import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.ConfigDef;
 import com.streamsets.pipeline.lib.el.RecordEL;
@@ -42,7 +42,7 @@ import java.util.TimeZone;
     icon="metadata.png",
     outputStreams = HiveMetadataOutputStreams.class,
     privateClassLoader = true,
-    onlineHelpRefUrl = "index.html#Processors/HiveMetadata.html#task_hpg_pft_zv",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/HiveMetadata.html#task_hpg_pft_zv",
     upgrader = HiveMetadataProcessorUpgrader.class
 )
 

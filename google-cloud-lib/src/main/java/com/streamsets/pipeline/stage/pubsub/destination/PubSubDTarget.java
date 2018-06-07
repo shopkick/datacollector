@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.stage.pubsub.lib.Groups;
 
 @StageDef(
@@ -29,7 +29,7 @@ import com.streamsets.pipeline.stage.pubsub.lib.Groups;
     label = "Google Pub Sub Publisher",
     description = "Publishes messages to Google Pub/Sub",
     icon = "pubsub.png",
-    onlineHelpRefUrl = "index.html#Destinations/PubSubPublisher.html#task_n1k_sk1_v1b"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/PubSubPublisher.html#task_n1k_sk1_v1b"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle

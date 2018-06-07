@@ -23,19 +23,18 @@
   <parent>
     <groupId>com.streamsets</groupId>
     <artifactId>streamsets-datacollector-root</artifactId>
-    <version>3.1.0.0-SNAPSHOT</version>
+    <version>3.3.0</version>
     <relativePath>../root</relativePath>
   </parent>
   <groupId>com.streamsets</groupId>
   <artifactId>streamsets-datacollector-container</artifactId>
-  <version>3.1.0.0-SNAPSHOT</version>
+  <version>3.3.0</version>
   <description>StreamSets Data Collector Container</description>
   <name>StreamSets Data Collector Container</name>
   <packaging>jar</packaging>
 
   <properties>
     <aws.version>1.10.59</aws.version>
-    <commons-compress.version>1.10</commons-compress.version>
     <sdc.log4j.level>DEBUG</sdc.log4j.level>
   </properties>
 
@@ -227,7 +226,6 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
-      <version>${commons-compress.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -347,16 +345,6 @@
       <groupId>com.icegreen</groupId>
       <artifactId>greenmail</artifactId>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>javax.servlet.jsp</groupId>
-      <artifactId>jsp-api</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>commons-el</groupId>
-      <artifactId>commons-el</artifactId>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.esotericsoftware</groupId>

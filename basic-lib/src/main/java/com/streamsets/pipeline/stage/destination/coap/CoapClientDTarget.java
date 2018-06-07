@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.coap.Groups;
 
 @StageDef(
@@ -37,7 +37,7 @@ import com.streamsets.pipeline.lib.coap.Groups;
         ExecutionMode.EDGE
     },
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Destinations/CoAPClient.html#task_d2p_w3n_sz"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/CoAPClient.html#task_d2p_w3n_sz"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

@@ -21,15 +21,15 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.stage.destination.jdbc.Groups;
 
 @StageDef(
-    version = 2,
-    label = "JDBC Metadata",
-    description = "Write metadata to JDBC and write information for JDBC",
+    version = 1,
+    label = "Postgres Metadata",
+    description = "Create/alter tables in Postgres to match record structure",
     icon = "rdbms.png",
-    onlineHelpRefUrl = "index.html#TBD"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/JDBCMetadata.html#task_lpv_zsh_qcb"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

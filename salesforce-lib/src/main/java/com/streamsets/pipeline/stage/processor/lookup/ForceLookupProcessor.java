@@ -50,6 +50,7 @@ import com.streamsets.pipeline.lib.salesforce.Errors;
 import com.streamsets.pipeline.lib.salesforce.ForceLookupConfigBean;
 import com.streamsets.pipeline.lib.salesforce.ForceSDCFieldMapping;
 import com.streamsets.pipeline.lib.salesforce.ForceUtils;
+import com.streamsets.pipeline.lib.salesforce.LookupMode;
 import com.streamsets.pipeline.lib.salesforce.SoapRecordCreator;
 import com.streamsets.pipeline.stage.common.DefaultErrorRecordHandler;
 import com.streamsets.pipeline.stage.common.ErrorRecordHandler;
@@ -60,12 +61,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.xml.namespace.QName;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
@@ -76,6 +79,7 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
   private static final int MAX_OBJECT_IDS = 2000;
   private static final Logger LOG = LoggerFactory.getLogger(ForceLookupProcessor.class);
   final ForceLookupConfigBean conf;
+  private static final String CONF_PREFIX = "conf";
 
   private Map<String, String> columnsToFields = new HashMap<>();
   private Map<String, String> columnsToDefaults = new HashMap<>();
@@ -114,6 +118,9 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
   @Override
   protected List<ConfigIssue> init() {
     List<ConfigIssue> issues = super.init();
+    Optional
+        .ofNullable(conf.init(getContext(), CONF_PREFIX ))
+        .ifPresent(issues::addAll);
 
     errorRecordHandler = new DefaultErrorRecordHandler(getContext());
 
@@ -124,7 +131,10 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
         ConnectorConfig partnerConfig = ForceUtils.getPartnerConfig(conf, new ForceLookupProcessor.ForceSessionRenewer());
 
         partnerConnection = new PartnerConnection(partnerConfig);
-      } catch (ConnectionException | StageException e) {
+        if (conf.mutualAuth.useMutualAuth) {
+          ForceUtils.setupMutualAuth(partnerConfig, conf.mutualAuth);
+        }
+      } catch (ConnectionException | StageException | URISyntaxException e) {
         LOG.error("Error connecting: {}", e);
         issues.add(getContext().createConfigIssue(Groups.FORCE.name(),
             "connectorConfig",
@@ -151,7 +161,10 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
     if (issues.isEmpty()) {
       cache = buildCache();
       cacheCleaner = new CacheCleaner(cache, "ForceLookupProcessor", 10 * 60 * 1000);
-      recordCreator = new SoapRecordCreator(getContext(), conf, conf.sObjectType);
+      if (conf.lookupMode == LookupMode.RETRIEVE) {
+        // All records are of the configured object type, so we only need one record creator
+        recordCreator = new SoapRecordCreator(getContext(), conf, conf.sObjectType);
+      }
     }
 
     return issues;
@@ -356,7 +369,9 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
   private void processQuery(Batch batch, SingleLaneBatchMaker batchMaker) throws StageException {
     if (batch.getRecords().hasNext()) {
       // New record creator for each batch
-      recordCreator.clearMetadataCache();
+      if (recordCreator != null) {
+        recordCreator.clearMetadataCache();
+      }
     } else {
       // No records - take the opportunity to clean up the cache so that we don't hold on to memory indefinitely
       cacheCleaner.periodicCleanUp();
@@ -396,9 +411,15 @@ public class ForceLookupProcessor extends SingleLaneRecordProcessor {
   }
 
   private String prepareQuery(String preparedQuery) throws StageException {
+    String sobjectType = ForceUtils.getSobjectTypeFromQuery(preparedQuery);
+
+    if (recordCreator == null || ! sobjectType.equals(recordCreator.getSobjectType())) {
+      recordCreator = new SoapRecordCreator(getContext(), conf, sobjectType);
+    }
+
     if (recordCreator.queryHasWildcard(preparedQuery)) {
       if (!recordCreator.metadataCacheExists()) {
-        // Can't follow relationships on a wildcard query, so build the cache from the object type
+        // No need to follow relationships on a wildcard query, so build the cache from the object type
         recordCreator.buildMetadataCache(partnerConnection);
       }
       preparedQuery = recordCreator.expandWildcard(preparedQuery);

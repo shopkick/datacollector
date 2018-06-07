@@ -17,6 +17,7 @@ package com.streamsets.datacollector.execution;
 
 import com.streamsets.datacollector.config.PipelineConfiguration;
 import com.streamsets.datacollector.creation.PipelineConfigBean;
+import com.streamsets.datacollector.credential.CredentialStoresTask;
 import com.streamsets.datacollector.email.EmailSender;
 import com.streamsets.datacollector.event.handler.remote.RemoteDataCollector;
 import com.streamsets.datacollector.execution.alerts.EmailNotifier;
@@ -31,6 +32,8 @@ import com.streamsets.datacollector.util.Configuration;
 import com.streamsets.datacollector.util.ContainerError;
 import com.streamsets.datacollector.util.PipelineException;
 import com.streamsets.datacollector.util.ValidationUtil;
+import com.streamsets.datacollector.validation.Issue;
+import com.streamsets.datacollector.validation.Issues;
 import com.streamsets.datacollector.validation.PipelineConfigurationValidator;
 import com.streamsets.lib.security.acl.dto.Acl;
 import com.streamsets.pipeline.api.StageException;
@@ -53,6 +56,7 @@ public abstract  class AbstractRunner implements Runner {
   @Inject protected EventListenerManager eventListenerManager;
   @Inject protected PipelineStoreTask pipelineStore;
   @Inject protected StageLibraryTask stageLibrary;
+  @Inject protected CredentialStoresTask credentialStoresTask;
   @Inject protected RuntimeInfo runtimeInfo;
   @Inject protected Configuration configuration;
   protected Map<String, Object> runtimeParameters;
@@ -63,8 +67,11 @@ public abstract  class AbstractRunner implements Runner {
     PipelineConfigurationValidator validator = new PipelineConfigurationValidator(stageLibrary, name, load);
     PipelineConfiguration validate = validator.validate();
     if(validator.getIssues().hasIssues()) {
-      throw new PipelineRunnerException(ContainerError.CONTAINER_0158, ValidationUtil.getFirstIssueAsString(name,
-        validator.getIssues()));
+      LOG.error("Can't run pipeline due to issues: {}", validator.getIssues().getIssueCount());
+      for(Issue issue : validator.getIssues().getIssues()) {
+        LOG.error("Pipeline validation error: {}", issue);
+      }
+      throw new PipelineRunnerException(ContainerError.CONTAINER_0158, validator.getIssues().getIssues().size());
     }
     return validate;
   }
@@ -169,7 +176,7 @@ public abstract  class AbstractRunner implements Runner {
     LOG.info("Scheduling retry in '{}' milliseconds", delay);
     return runnerExecutor.schedule(() -> {
       LOG.info("Starting the runner now");
-      prepareForStart(user);
+      prepareForStart(user, runtimeParameters);
       start(user, runtimeParameters);
       return null;
     }, delay, TimeUnit.MILLISECONDS);

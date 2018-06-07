@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DPushSource;
+import com.streamsets.pipeline.api.base.configurablestage.DPushSource;
 
 @StageDef(
     version = 1,
@@ -31,7 +31,7 @@ import com.streamsets.pipeline.configurablestage.DPushSource;
     execution = ExecutionMode.STANDALONE,
     recordsByRef = true,
     resetOffset = true,
-    onlineHelpRefUrl = "index.html#Origins/AmazonSQS.html#task_jxn_nnm_5bb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/AmazonSQS.html#task_jxn_nnm_5bb"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

@@ -20,7 +20,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @StageDef(
     version = 1,
@@ -28,7 +28,7 @@ import com.streamsets.pipeline.configurablestage.DTarget;
     description = "Writes data to Azure IoT Hub",
     icon = "azure-iot-hub.png",
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Destinations/AzureIoTHub.html#task_tqc_vkq_1bb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/AzureIoTHub.html#task_tqc_vkq_1bb"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

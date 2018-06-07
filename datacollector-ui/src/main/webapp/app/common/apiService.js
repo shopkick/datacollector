@@ -208,7 +208,7 @@ angular.module('dataCollectorApp.common')
       },
 
       /**
-       * Enable SCH
+       * Enable Control Hub
        * @param dpmInfo
        */
       enableDPM: function(dpmInfo) {
@@ -221,7 +221,7 @@ angular.module('dataCollectorApp.common')
       },
 
       /**
-       * Disable SCH
+       * Disable Control Hub
        */
       disableDPM: function() {
         var url = apiBase + '/system/disableDPM';
@@ -232,7 +232,7 @@ angular.module('dataCollectorApp.common')
       },
 
       /**
-       * Create SCH Groups & Users
+       * Create Control Hub Groups & Users
        * @param dpmInfo
        * @returns {*}
        */
@@ -794,6 +794,21 @@ angular.module('dataCollectorApp.common')
         var url = apiBase + '/pipelines/executable?edgeOs=' + edgeOs + '&edgeArch=' + edgeArch +
           '&pipelineIds=' + pipelineIds.join(',');
         window.open(url, '_blank', '');
+      },
+
+      /**
+       * Publish Pipelines to Data Collector Edge
+       *
+       * @param pipelineIds
+       * @returns {*}
+       */
+      publishPipelinesToEdge: function(pipelineIds) {
+        var url = apiBase + '/pipelines/publishToEdge' ;
+        return $http({
+          method: 'POST',
+          url: url,
+          data: pipelineIds
+        });
       },
 
       /**

@@ -23,12 +23,12 @@
   <parent>
     <groupId>com.streamsets</groupId>
     <artifactId>streamsets-datacollector-stage-lib-parent</artifactId>
-    <version>3.1.0.0-SNAPSHOT</version>
+    <version>3.3.0</version>
     <relativePath>../stage-lib-parent</relativePath>
   </parent>
   <groupId>com.streamsets</groupId>
   <artifactId>streamsets-datacollector-cdh_5_3-lib</artifactId>
-  <version>3.1.0.0-SNAPSHOT</version>
+  <version>3.3.0</version>
   <description>StreamSets Data Collector CDH 5.3.10 Lib</description>
   <name>StreamSets Data Collector CDH 5.3.10 Lib</name>
   <packaging>jar</packaging>
@@ -36,6 +36,7 @@
   <properties>
     <hadoop.version>2.5.0-cdh5.3.10</hadoop.version>
     <hbase.version>0.98.6-cdh5.3.10</hbase.version>
+    <hive.version>0.13.1-cdh5.3.10</hive.version>
     <solr.version>4.4.0-cdh5.3.10</solr.version>
     <solr.test.jetty.version>8.1.10.v20130312</solr.test.jetty.version>
     <flume.version>1.5.0-cdh5.3.10</flume.version>
@@ -419,9 +420,22 @@
     <!-- test dependencies-->
     <dependency>
       <groupId>com.streamsets</groupId>
+      <artifactId>streamsets-datacollector-stagesupport</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-commonlib</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.streamsets</groupId>
+      <artifactId>streamsets-datacollector-dir-spooler-protolib</artifactId>
+      <type>test-jar</type>
+      <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -22,8 +22,8 @@ import com.google.common.collect.ImmutableSet;
 import com.streamsets.pipeline.api.Field;
 import com.streamsets.pipeline.api.FileRef;
 import com.streamsets.pipeline.api.OnRecordError;
+import com.streamsets.pipeline.api.ProtoConfigurableEntity;
 import com.streamsets.pipeline.api.Record;
-import com.streamsets.pipeline.api.Stage;
 import com.streamsets.pipeline.api.StageException;
 import com.streamsets.pipeline.api.base.OnRecordErrorException;
 import com.streamsets.pipeline.config.DateFormat;
@@ -55,6 +55,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+
+import static com.streamsets.pipeline.stage.processor.fieldtypeconverter.Errors.CONVERTER_04;
 
 public class TestFieldTypeConverterProcessorFields {
 
@@ -1228,6 +1230,38 @@ public class TestFieldTypeConverterProcessorFields {
   }
 
   @Test
+  public void testInvalidType() throws Exception {
+    FieldTypeConverterConfig config1 =
+        new FieldTypeConverterConfig();
+    config1.fields = ImmutableList.of("/zdt-1");
+    config1.targetType = Field.Type.LONG;
+    config1.dataLocale = "en";
+    config1.zonedDateTimeFormat = ZonedDateTimeFormat.ISO_ZONED_DATE_TIME;
+
+    ProcessorRunner runner = new ProcessorRunner.Builder(FieldTypeConverterDProcessor.class)
+        .addConfiguration("convertBy", ConvertBy.BY_FIELD)
+        .addConfiguration("fieldTypeConverterConfigs",
+            ImmutableList.of(config1))
+        .addOutputLane("a").build();
+    runner.runInit();
+
+    Map<String, Field> map = new LinkedHashMap<>();
+    ZonedDateTime current = ZonedDateTime.now();
+    map.put("zdt-1", Field.createZonedDateTime(current));
+    Record record = RecordCreator.create("s", "s:1");
+    record.set(Field.create(map));
+
+    try {
+      runner.runProcess(ImmutableList.of(record));
+      Assert.fail();
+    } catch (StageException ex) {
+      Assert.assertEquals(CONVERTER_04.getCode(), ex.getErrorCode().getCode());
+    } finally {
+      runner.runDestroy();
+    }
+  }
+
+  @Test
   public void testInvalidMask() {
 
     List<FieldTypeConverterConfig> valids = new ArrayList<>();
@@ -1794,7 +1828,7 @@ public class TestFieldTypeConverterProcessorFields {
 
       @Override
       @SuppressWarnings("unchecked")
-      public <T extends AutoCloseable> T createInputStream(Stage.Context context, Class<T> streamClassType) throws IOException {
+      public <T extends AutoCloseable> T createInputStream(ProtoConfigurableEntity.Context context, Class<T> streamClassType) throws IOException {
         return (T) new ByteArrayInputStream("Sample".getBytes());
       }
     }));

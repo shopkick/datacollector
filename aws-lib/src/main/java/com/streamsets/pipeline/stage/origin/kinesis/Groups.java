@@ -21,6 +21,7 @@ import com.streamsets.pipeline.api.Label;
 @GenerateResourceBundle
 public enum Groups implements Label {
   KINESIS("Kinesis"),
+  LEASE_TABLE("Lease Table"),
   ADVANCED("Advanced"),
   DATA_FORMAT("Data Format"),
   ;

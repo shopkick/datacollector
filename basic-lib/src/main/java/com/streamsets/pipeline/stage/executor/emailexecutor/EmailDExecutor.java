@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.PipelineLifecycleStage;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DExecutor;
+import com.streamsets.pipeline.api.base.configurablestage.DExecutor;
 
 import java.util.List;
 
@@ -31,7 +31,7 @@ import java.util.List;
     label="Email Executor",
     description = "Sends emails upon receipt of specific events",
     icon="envelope.png",
-    onlineHelpRefUrl = "index.html#Executors/Email.html#task_pyx_tfp_qz"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Executors/Email.html#task_pyx_tfp_qz"
 )
 
 @ConfigGroups(Groups.class)

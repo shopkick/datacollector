@@ -16,14 +16,12 @@
 package com.streamsets.pipeline.stage.origin.jdbc.CT.sqlserver;
 
 import com.google.common.collect.ImmutableList;
-import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.Stage;
 import com.streamsets.pipeline.lib.jdbc.multithread.BatchTableStrategy;
 import com.streamsets.pipeline.sdk.PushSourceRunner;
 
 import org.junit.Assert;
 import org.junit.Test;
-import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +33,7 @@ public class TestSQLServerCTSource {
     private static final String JDBC_URL = "jdbc:sqlserver://localhost:1433" + database;
 
     private void testWrongConfiguration(SQLServerCTSource tableJdbcSource) throws Exception {
-      PushSourceRunner runner = new PushSourceRunner.Builder(SQLServerCTSource.class, tableJdbcSource)
+      PushSourceRunner runner = new PushSourceRunner.Builder(SQLServerCTDSource.class, tableJdbcSource)
           .addOutputLane("a").build();
       List<Stage.ConfigIssue> issues = runner.runValidateConfigs();
       Assert.assertEquals(1, issues.size());

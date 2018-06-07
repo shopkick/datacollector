@@ -23,9 +23,8 @@ import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.el.RecordEL;
-import com.streamsets.pipeline.lib.el.StringEL;
 import com.streamsets.pipeline.lib.jdbc.HikariPoolConfigBean;
 import com.streamsets.pipeline.lib.jdbc.JdbcFieldColumnMapping;
 import com.streamsets.pipeline.stage.common.MissingValuesBehavior;
@@ -42,7 +41,7 @@ import java.util.List;
     description = "Lookup values via JDBC to enrich records.",
     icon = "rdbms.png",
     upgrader = JdbcLookupProcessorUpgrader.class,
-    onlineHelpRefUrl = "index.html#Processors/JDBCLookup.html#task_kbr_2cy_hw"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/JDBCLookup.html#task_kbr_2cy_hw"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle
@@ -54,7 +53,7 @@ public class JdbcLookupDProcessor extends DProcessor {
       mode = ConfigDef.Mode.SQL,
       label = "SQL Query",
       description = "SELECT <column>, ... FROM <table name> WHERE <column> <operator>  <expression>",
-      elDefs = {StringEL.class, RecordEL.class},
+      elDefs = {RecordEL.class},
       evaluation = ConfigDef.Evaluation.EXPLICIT,
       displayPosition = 20,
       group = "JDBC"

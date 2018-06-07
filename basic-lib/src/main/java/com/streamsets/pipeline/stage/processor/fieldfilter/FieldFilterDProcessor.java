@@ -25,7 +25,7 @@ import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.el.FieldEL;
 import com.streamsets.pipeline.lib.el.RecordEL;
 
@@ -36,7 +36,7 @@ import java.util.List;
     label="Field Remover",
     description="Removes fields from a record",
     icon="filter.png",
-    onlineHelpRefUrl = "index.html#Processors/FieldRemover.html#task_c1j_btr_wq",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/FieldRemover.html#task_c1j_btr_wq",
     execution = {
         ExecutionMode.STANDALONE,
         ExecutionMode.CLUSTER_BATCH,

@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Source;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DSource;
+import com.streamsets.pipeline.api.base.configurablestage.DSource;
 
 @GenerateResourceBundle
 @StageDef(
@@ -31,7 +31,7 @@ import com.streamsets.pipeline.configurablestage.DSource;
     description = "Reads data from a Windows event log",
     execution = {ExecutionMode.EDGE},
     icon = "winlogo.png",
-    onlineHelpRefUrl = "index.html#Origins/WindowsLog.html#task_lmc_yjv_sbb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/WindowsLog.html#task_lmc_yjv_sbb"
 )
 
 @ConfigGroups(Groups.class)

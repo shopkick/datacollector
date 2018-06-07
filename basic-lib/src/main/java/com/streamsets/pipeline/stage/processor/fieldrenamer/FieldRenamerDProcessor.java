@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 import java.util.List;
 
@@ -32,7 +32,7 @@ import java.util.List;
     description = "Rename fields",
     icon="edit.png",
     upgrader = FieldRenamerProcessorUpgrader.class,
-    onlineHelpRefUrl = "index.html#Processors/FieldRenamer.html#task_y5g_4hh_ht"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/FieldRenamer.html#task_y5g_4hh_ht"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

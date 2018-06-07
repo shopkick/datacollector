@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DPushSource;
+import com.streamsets.pipeline.api.base.configurablestage.DPushSource;
 import com.streamsets.pipeline.lib.mqtt.Groups;
 import com.streamsets.pipeline.lib.mqtt.MqttClientConfigBean;
 
@@ -33,7 +33,7 @@ import com.streamsets.pipeline.lib.mqtt.MqttClientConfigBean;
     icon = "mqtt_multithreaded.png",
     execution = {ExecutionMode.STANDALONE, ExecutionMode.EDGE},
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Origins/MQTTSubscriber.html#task_wnz_mxt_lz",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/MQTTSubscriber.html#task_wnz_mxt_lz",
     upgrader = MqttClientSourceUpgrader.class
 )
 @HideConfigs({

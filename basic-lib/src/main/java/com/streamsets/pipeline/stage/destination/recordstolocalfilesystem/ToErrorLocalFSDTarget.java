@@ -23,8 +23,8 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.api.el.SdcEL;
-import com.streamsets.pipeline.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.el.TimeEL;
 
 @StageDef(
@@ -32,7 +32,7 @@ import com.streamsets.pipeline.lib.el.TimeEL;
     label = "Write to File",
     description = "Writes records to a local File System as SDC records",
     execution = ExecutionMode.STANDALONE,
-    onlineHelpRefUrl = "index.html#Destinations/SDCRecordFiles.html#task_e33_3v5_1r"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/SDCRecordFiles.html#task_e33_3v5_1r"
 )
 @HideConfigs(preconditions = true, onErrorRecord = true)
 @ErrorStage

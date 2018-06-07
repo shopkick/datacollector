@@ -19,14 +19,14 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @StageDef(
     version = 1,
     label = "To Error",
     description = "Sends records to the pipeline configured error records handling",
     icon="toerror.png",
-    onlineHelpRefUrl = "index.html#Destinations/ToError.html"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/ToError.html"
 )
 @HideConfigs(preconditions = true, onErrorRecord = true)
 @GenerateResourceBundle

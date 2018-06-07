@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @StageDef(
     version = 1,
@@ -29,7 +29,7 @@ import com.streamsets.pipeline.configurablestage.DTarget;
     description = "Writes to google cloud storage.",
     icon = "cloud-storage-logo.png",
     producesEvents = true,
-    onlineHelpRefUrl = "index.html#Destinations/GCS.html#task_vn4_nrl_nbb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/GCS.html#task_vn4_nrl_nbb"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle

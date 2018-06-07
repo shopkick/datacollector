@@ -20,7 +20,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @GenerateResourceBundle
 @StageDef(
@@ -29,7 +29,7 @@ import com.streamsets.pipeline.configurablestage.DTarget;
     description = "Writes data to Kudu",
     icon = "kudu.png",
     privateClassLoader = true,
-    onlineHelpRefUrl = "index.html#Destinations/Kudu.html#task_c4x_tmh_4v",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/Kudu.html#task_c4x_tmh_4v",
     upgrader = KuduTargetUpgrader.class
 )
 @ConfigGroups(Groups.class)

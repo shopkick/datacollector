@@ -22,10 +22,12 @@ import com.streamsets.datacollector.config.DataRuleDefinition;
 import com.streamsets.datacollector.config.DriftRuleDefinition;
 import com.streamsets.datacollector.config.MetricsRuleDefinition;
 import com.streamsets.datacollector.config.PipelineConfiguration;
+import com.streamsets.datacollector.config.PipelineFragmentConfiguration;
 import com.streamsets.datacollector.config.RuleDefinitions;
 import com.streamsets.datacollector.config.StageConfiguration;
 import com.streamsets.datacollector.creation.PipelineBeanCreator;
 import com.streamsets.datacollector.creation.PipelineConfigBean;
+import com.streamsets.datacollector.creation.PipelineFragmentConfigBean;
 import com.streamsets.datacollector.creation.RuleDefinitionsConfigBean;
 import com.streamsets.datacollector.event.handler.remote.RemoteDataCollector;
 import com.streamsets.datacollector.execution.PipelineState;
@@ -186,11 +188,12 @@ public class FilePipelineStoreTask extends AbstractTask implements PipelineStore
       if (!draft) {
         try {
           Files.createDirectory(getPipelineDir(pipelineId));
+          Files.createDirectories(PipelineDirectoryUtil.getPipelineDir(runtimeInfo, pipelineId, REV).toPath());
         } catch (IOException e) {
           throw new PipelineStoreException(
               ContainerError.CONTAINER_0202,
               pipelineId,
-              Utils.format("'{}' mkdir failed", getPipelineDir(pipelineId)),
+              "mkdir failed",
               e
           );
         }
@@ -296,6 +299,7 @@ public class FilePipelineStoreTask extends AbstractTask implements PipelineStore
         } catch (Exception e) {
           LOG.warn("Cannot set delete event for pipeline");
         }
+        pipelineStateStore.delete(name, REV);
       }
     }
   }
@@ -650,6 +654,52 @@ public class FilePipelineStoreTask extends AbstractTask implements PipelineStore
         .get(RemoteDataCollector.IS_REMOTE_PIPELINE);
     // remote attribute will be null for pipelines with version earlier than 1.3
     return isRemote != null && (boolean) isRemote;
+  }
+
+  @Override
+  public PipelineFragmentConfiguration createPipelineFragment(
+      String user,
+      String pipelineId,
+      String pipelineTitle,
+      String description,
+      boolean draft
+  ) {
+    // Supporting only draft version now - not storing in disk
+    synchronized (lockCache.getLock(pipelineId)) {
+      Date date = new Date();
+      UUID uuid = UUID.randomUUID();
+      PipelineInfo info = new PipelineInfo(
+          pipelineId,
+          pipelineTitle,
+          description,
+          date,
+          date,
+          user,
+          user,
+          REV,
+          uuid,
+          false,
+          null,
+          buildInfo.getVersion(),
+          runtimeInfo.getId()
+      );
+
+      PipelineFragmentConfiguration pipelineFragmentConfiguration = new PipelineFragmentConfiguration(
+          uuid,
+          PipelineFragmentConfigBean.VERSION,
+          SCHEMA_VERSION,
+          pipelineTitle,
+          pipelineId,
+          pipelineId,
+          description,
+          Collections.emptyList(),
+          Collections.emptyList(),
+          Collections.emptyMap(),
+          stageLibrary.getPipelineFragment().getPipelineFragmentDefaultConfigs()
+      );
+      pipelineFragmentConfiguration.setPipelineInfo(info);
+      return pipelineFragmentConfiguration;
+    }
   }
 
 }

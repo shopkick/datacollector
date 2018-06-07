@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.rabbitmq.config.Groups;
 
 @StageDef(
@@ -32,11 +32,11 @@ import com.streamsets.pipeline.lib.rabbitmq.config.Groups;
     execution = ExecutionMode.STANDALONE,
     recordsByRef = true,
     upgrader = RabbitTargetUpgrader.class,
-    onlineHelpRefUrl = "index.html#Destinations/RabbitMQ.html#task_rwy_wn5_2v"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/RabbitMQ.html#task_rwy_wn5_2v"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle
-public class RabbitDTarget extends DTarget{
+public class RabbitDTarget extends DTarget {
   @ConfigDefBean(groups = {"RABBITMQ", "QUEUE", "EXCHANGE", "ADVANCED"})
   public RabbitTargetConfigBean conf;
 

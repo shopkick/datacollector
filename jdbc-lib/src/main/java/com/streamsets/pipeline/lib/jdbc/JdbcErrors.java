@@ -17,7 +17,7 @@ package com.streamsets.pipeline.lib.jdbc;
 
 import com.streamsets.pipeline.api.ErrorCode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
-import com.streamsets.pipeline.stage.processor.jdbclookup.JdbcLookupLoader;
+import com.streamsets.pipeline.stage.processor.jdbclookup.JdbcLookupProcessor;
 
 @GenerateResourceBundle
 public enum JdbcErrors implements ErrorCode {
@@ -43,7 +43,7 @@ public enum JdbcErrors implements ErrorCode {
   JDBC_20("Could not parse the table name template expression: {}"),
   JDBC_21("Could not evaluate the table name template expression: {}"),
   JDBC_22("The record had no fields that matched the columns in the destination table."),
-  JDBC_23("The field '{}' of type '{}' doesn't match the destination column's type."),
+  JDBC_23("Can't coerce '{}' of type '{}' to column '{}'"),
   JDBC_24("No results from insert"),
   JDBC_25("No column mapping for column '{}'"),
   JDBC_26("Invalid table name template expression '{}': {}"),
@@ -78,8 +78,8 @@ public enum JdbcErrors implements ErrorCode {
   JDBC_52("Error starting LogMiner"),
   JDBC_53("Since the default value of '{}' is not empty, its data type cannot be '" + DataType.USE_COLUMN_TYPE.getLabel() + "'."),
   JDBC_54("Column: '{}' does not exist in table: '{}'. This is likely due to a DDL being performed on this table"),
-  JDBC_55("The default value of '{}' must be in the format '" + JdbcLookupLoader.DATE_FORMAT + "': {}"),
-  JDBC_56("The default value of '{}' must be in the format '" + JdbcLookupLoader.DATETIME_FORMAT + "': {}"),
+  JDBC_55("The default value of '{}' must be in the format '" + JdbcLookupProcessor.DATE_FORMAT + "': {}"),
+  JDBC_56("The default value of '{}' must be in the format '" + JdbcLookupProcessor.DATETIME_FORMAT + "': {}"),
   JDBC_57("Unsupported Multi-Row Operation to SQL Server"),
 
   JDBC_60("Cannot Serialize Offset: {}"),
@@ -132,6 +132,11 @@ public enum JdbcErrors implements ErrorCode {
   JDBC_307("Invalid decimal value {} in field {}: {} {} is more then expected {} "),
   JDBC_308("Information {} missing or invalid in the metadata record: {}"),
   JDBC_309("No schema writer for connection string '{}'"),
+
+  JDBC_401("Record '{}' has null or empty field '{}'"),
+  JDBC_402("Columns '{}' are not present in {}"),
+  JDBC_403("Could not parse SQL statement: {}"),
+
   ;
 
   private final String msg;

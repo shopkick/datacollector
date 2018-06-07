@@ -22,18 +22,22 @@ import com.streamsets.pipeline.sdk.PushSourceRunner;
 import com.streamsets.pipeline.sdk.StageRunner;
 import com.streamsets.pipeline.stage.origin.lib.DataParserFormatConfig;
 import com.streamsets.testing.NetworkUtils;
+import org.awaitility.Duration;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.internal.util.reflection.Whitebox;
 
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import static org.awaitility.Awaitility.await;
 
 public class TestWebSocketServerPushSource {
 
@@ -47,7 +51,7 @@ public class TestWebSocketServerPushSource {
     WebSocketServerPushSource source =
         new WebSocketServerPushSource(webSocketConfigs, DataFormat.JSON, new DataParserFormatConfig());
     final PushSourceRunner runner =
-        new PushSourceRunner.Builder(WebSocketServerPushSource.class, source).addOutputLane("a").build();
+        new PushSourceRunner.Builder(WebSocketServerDPushSource.class, source).addOutputLane("a").build();
     runner.runInit();
     try {
       final List<Record> records = new ArrayList<>();
@@ -59,6 +63,10 @@ public class TestWebSocketServerPushSource {
           runner.setStop();
         }
       });
+
+      // wait for the HTTP server up and running
+      WebSocketReceiverServer httpServer = (WebSocketReceiverServer) Whitebox.getInternalState(source, "server");
+      await().atMost(Duration.TEN_SECONDS).until(isServerRunning(httpServer));
 
       WebSocketClient client = new WebSocketClient();
       SimpleEchoSocket socket = new SimpleEchoSocket();
@@ -101,7 +109,7 @@ public class TestWebSocketServerPushSource {
     WebSocketServerPushSource source =
         new WebSocketServerPushSource(webSocketConfigs, DataFormat.JSON, new DataParserFormatConfig());
     final PushSourceRunner runner =
-        new PushSourceRunner.Builder(WebSocketServerPushSource.class, source).addOutputLane("a").build();
+        new PushSourceRunner.Builder(WebSocketServerDPushSource.class, source).addOutputLane("a").build();
     runner.runInit();
     try {
       final List<Record> records = new ArrayList<>();
@@ -113,6 +121,10 @@ public class TestWebSocketServerPushSource {
           runner.setStop();
         }
       });
+
+      // wait for the HTTP server up and running
+      WebSocketReceiverServer httpServer = (WebSocketReceiverServer) Whitebox.getInternalState(source, "server");
+      await().atMost(Duration.TEN_SECONDS).until(isServerRunning(httpServer));
 
       WebSocketClient client = new WebSocketClient();
       SimpleEchoSocket socket = new SimpleEchoSocket();
@@ -143,4 +155,12 @@ public class TestWebSocketServerPushSource {
     }
   }
 
+  public static Callable<Boolean> isServerRunning(WebSocketReceiverServer httpServer ) {
+    return new Callable<Boolean>() {
+      @Override
+      public Boolean call() throws Exception {
+        return httpServer.isRunning();
+      }
+    };
+  }
 }

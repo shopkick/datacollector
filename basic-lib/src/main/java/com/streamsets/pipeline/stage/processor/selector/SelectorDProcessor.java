@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.PredicateModel;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.el.RecordEL;
 import com.streamsets.pipeline.lib.el.TimeNowEL;
 
@@ -36,7 +36,7 @@ import java.util.Map;
     icon="laneSelector.png",
     outputStreams = StageDef.VariableOutputStreams.class,
     outputStreamsDrivenByConfig = "lanePredicates",
-    onlineHelpRefUrl = "index.html#Processors/StreamSelector.html#task_iss_2zx_wq",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/StreamSelector.html#task_iss_2zx_wq",
     execution = {
         ExecutionMode.STANDALONE,
         ExecutionMode.CLUSTER_BATCH,

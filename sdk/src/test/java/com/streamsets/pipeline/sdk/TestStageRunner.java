@@ -23,6 +23,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.OnRecordError;
 import com.streamsets.pipeline.api.Stage;
 
+import com.streamsets.pipeline.api.StageDef;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -32,7 +33,13 @@ import java.util.Map;
 
 public class TestStageRunner {
 
-  public static interface DummyStage extends Stage {
+
+  @StageDef(
+    version = 1,
+    label = "Test",
+    onlineHelpRefUrl = ""
+  )
+  public static abstract class DummyStage implements Stage {
   }
 
   public static class DummyStageRunner extends StageRunner<DummyStage> {
@@ -46,7 +53,8 @@ public class TestStageRunner {
       Map<String, String> stageSdcConf,
       ExecutionMode executionMode,
       String resourcesDir,
-      RuntimeInfo runtimeInfo
+      RuntimeInfo runtimeInfo,
+      List<ServiceRunner> services
     ) {
       super(
         stageClass,
@@ -60,7 +68,8 @@ public class TestStageRunner {
         executionMode,
         DeliveryGuarantee.AT_LEAST_ONCE,
         resourcesDir,
-        runtimeInfo
+        runtimeInfo,
+        services
       );
     }
 
@@ -74,7 +83,8 @@ public class TestStageRunner {
       Map<String, String> stageSdcConf,
       ExecutionMode executionMode,
       String resourcesDir,
-      RuntimeInfo runtimeInfo
+      RuntimeInfo runtimeInfo,
+      List<ServiceRunner> services
     ) {
       super(
         stageClass,
@@ -89,7 +99,8 @@ public class TestStageRunner {
         executionMode,
         DeliveryGuarantee.AT_LEAST_ONCE,
         resourcesDir,
-        runtimeInfo
+        runtimeInfo,
+        services
       );
     }
 
@@ -117,7 +128,8 @@ public class TestStageRunner {
             stageSdcConf,
             executionMode,
             resourcesDir,
-            runtimeInfo
+            runtimeInfo,
+            services
           )
           : new DummyStageRunner(
             stageClass,
@@ -128,13 +140,19 @@ public class TestStageRunner {
             stageSdcConf,
             executionMode,
             resourcesDir,
-            runtimeInfo
+            runtimeInfo,
+            services
           );
       }
     }
   }
 
-  public static class DummyStage1 implements DummyStage {
+  @StageDef(
+    version = 1,
+    label = "Test",
+    onlineHelpRefUrl = ""
+  )
+  public static class DummyStage1 extends DummyStage {
 
     public boolean initialized;
     public boolean destroyed;
@@ -284,6 +302,11 @@ public class TestStageRunner {
     builder.build();
   }
 
+  @StageDef(
+    version = 1,
+    label = "Test",
+    onlineHelpRefUrl = ""
+  )
   public static class DummyStage2 extends DummyStage1 {
 
     @ConfigDef(type = ConfigDef.Type.BOOLEAN, label = "L", required = false)

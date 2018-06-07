@@ -22,7 +22,7 @@ import com.streamsets.datacollector.config.CredentialStoreDefinition;
 import com.streamsets.datacollector.config.LineagePublisherDefinition;
 import com.streamsets.datacollector.config.ServiceDefinition;
 import com.streamsets.datacollector.config.StageDefinition;
-import com.streamsets.datacollector.definition.ELDefinitionExtractor;
+import com.streamsets.datacollector.definition.ConcreteELDefinitionExtractor;
 import com.streamsets.datacollector.el.RuntimeEL;
 import com.streamsets.datacollector.execution.alerts.DataRuleEvaluator;
 import com.streamsets.datacollector.main.BuildInfo;
@@ -30,8 +30,8 @@ import com.streamsets.datacollector.main.RuntimeInfo;
 import com.streamsets.datacollector.restapi.bean.BeanHelper;
 import com.streamsets.datacollector.restapi.bean.DefinitionsJson;
 import com.streamsets.datacollector.restapi.bean.PipelineDefinitionJson;
+import com.streamsets.datacollector.restapi.bean.PipelineFragmentDefinitionJson;
 import com.streamsets.datacollector.restapi.bean.PipelineRulesDefinitionJson;
-import com.streamsets.datacollector.restapi.bean.ServiceDefinitionJson;
 import com.streamsets.datacollector.restapi.bean.StageDefinitionJson;
 import com.streamsets.datacollector.restapi.bean.StageLibraryExtrasJson;
 import com.streamsets.datacollector.restapi.bean.StageLibraryJson;
@@ -133,19 +133,24 @@ public class StageLibraryResource {
   @Produces(MediaType.APPLICATION_JSON)
   @PermitAll
   public Response getDefinitions() {
-    //The definitions to be returned
+    // The definitions to be returned
     DefinitionsJson definitions = new DefinitionsJson();
 
-    //Populate the definitions with all the stage definitions
+    // Populate the definitions with all the stage definitions
     List<StageDefinition> stageDefinitions = stageLibrary.getStages();
     List<StageDefinitionJson> stages = new ArrayList<>(stageDefinitions.size());
     stages.addAll(BeanHelper.wrapStageDefinitions(stageDefinitions));
     definitions.setStages(stages);
 
-    //Populate the definitions with the PipelineDefinition
+    // Populate the definitions with the PipelineDefinition
     List<PipelineDefinitionJson> pipeline = new ArrayList<>(1);
     pipeline.add(BeanHelper.wrapPipelineDefinition(stageLibrary.getPipeline()));
     definitions.setPipeline(pipeline);
+
+    // Populate the definitions with the PipelineFragmentDefinition
+    List<PipelineFragmentDefinitionJson> pipelineFragment = new ArrayList<>(1);
+    pipelineFragment.add(BeanHelper.wrapPipelineFragmentDefinition(stageLibrary.getPipelineFragment()));
+    definitions.setPipelineFragment(pipelineFragment);
 
     // Populate service definitions
     List<ServiceDefinition> serviceDefinitions = stageLibrary.getServiceDefinitions();
@@ -160,9 +165,9 @@ public class StageLibraryResource {
 
     Map<String, Object> map = new HashMap<>();
     map.put(EL_FUNCTION_DEFS,
-        BeanHelper.wrapElFunctionDefinitionsIdx(ELDefinitionExtractor.get().getElFunctionsCatalog()));
+        BeanHelper.wrapElFunctionDefinitionsIdx(ConcreteELDefinitionExtractor.get().getElFunctionsCatalog()));
     map.put(EL_CONSTANT_DEFS,
-        BeanHelper.wrapElConstantDefinitionsIdx(ELDefinitionExtractor.get().getELConstantsCatalog()));
+        BeanHelper.wrapElConstantDefinitionsIdx(ConcreteELDefinitionExtractor.get().getELConstantsCatalog()));
     definitions.setElCatalog(map);
 
     definitions.setRuntimeConfigs(RuntimeEL.getRuntimeConfKeys());
@@ -188,9 +193,7 @@ public class StageLibraryResource {
 
     final InputStream resourceAsStream = stage.getStageClassLoader().getResourceAsStream(iconFile);
 
-    if(iconFile.endsWith(".svg"))
-      responseType = SVG_MEDIA_TYPE;
-    else if(iconFile.endsWith(".png"))
+    if(iconFile.endsWith(".png"))
       responseType = PNG_MEDIA_TYPE;
 
     return Response.ok().type(responseType).entity(resourceAsStream).build();
@@ -217,6 +220,18 @@ public class StageLibraryResource {
         installedLibraries.add(new StageLibraryJson(
             stageDefinition.getLibrary(),
             stageDefinition.getLibraryLabel(),
+            true
+        ));
+      }
+    }
+
+    List<ServiceDefinition> serviceDefinitions = stageLibrary.getServiceDefinitions();
+    for(ServiceDefinition serviceDefinition: serviceDefinitions) {
+      if (!installedLibrariesMap.containsKey(serviceDefinition.getLibraryDefinition().getName())) {
+        installedLibrariesMap.put(serviceDefinition.getLibraryDefinition().getName(), true);
+        installedLibraries.add(new StageLibraryJson(
+            serviceDefinition.getLibraryDefinition().getName(),
+            serviceDefinition.getLibraryDefinition().getLabel(),
             true
         ));
       }
@@ -393,7 +408,7 @@ public class StageLibraryResource {
       authorizations = @Authorization(value = "basic"))
   @Produces(MediaType.APPLICATION_JSON)
   @RolesAllowed({AuthzRole.ADMIN, AuthzRole.ADMIN_REMOTE})
-  public Response getExtras() throws IOException {
+  public Response getExtras() {
     String libsExtraDir = runtimeInfo.getLibsExtraDir();
     if (StringUtils.isEmpty(libsExtraDir)) {
       throw new RuntimeException(ContainerError.CONTAINER_01300.getMessage());
@@ -420,8 +435,7 @@ public class StageLibraryResource {
         .build();
   }
 
-  private void addExtras(File extraJarsDir, String libraryId, List<StageLibraryExtrasJson> extrasList)
-      throws IOException {
+  private void addExtras(File extraJarsDir, String libraryId, List<StageLibraryExtrasJson> extrasList) {
     if (extraJarsDir != null && extraJarsDir.exists()) {
       File[] files = extraJarsDir.listFiles();
       if (files != null ) {

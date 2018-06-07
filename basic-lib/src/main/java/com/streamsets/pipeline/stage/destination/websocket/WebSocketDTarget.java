@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.websocket.Groups;
 
 @StageDef(
@@ -38,7 +38,7 @@ import com.streamsets.pipeline.lib.websocket.Groups;
         ExecutionMode.CLUSTER_MESOS_STREAMING,
         ExecutionMode.EDGE
     },
-    onlineHelpRefUrl = "index.html#Destinations/WebSocketClient.html#task_erb_pjn_lz",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/WebSocketClient.html#task_erb_pjn_lz",
     upgrader = WebSocketTargetUpgrader.class
 )
 @ConfigGroups(Groups.class)

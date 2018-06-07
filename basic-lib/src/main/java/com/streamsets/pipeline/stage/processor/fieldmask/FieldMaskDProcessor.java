@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 import java.util.List;
 
@@ -30,7 +30,7 @@ import java.util.List;
     label = "Field Masker",
     description = "Masks field values",
     icon = "mask.png",
-    onlineHelpRefUrl = "index.html#Processors/FieldMasker.html#task_vgg_z44_wq"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/FieldMasker.html#task_vgg_z44_wq"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

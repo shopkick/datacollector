@@ -41,7 +41,7 @@ import com.streamsets.pipeline.stage.destination.jdbc.Groups;
 import com.streamsets.pipeline.stage.origin.jdbc.table.QuoteChar;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -988,17 +988,12 @@ public class JdbcUtil {
   }
 
   /**
-   * Checks whether to generate a no-more-data event, if
-   * so creates a new batch and then
+   * Generates the no-more-data event
    */
-  public static void generateNoMoreDataEventIfNeeded(boolean shouldGenerate, PushSource.Context context) {
-    //final boolean shouldGenerate = tableOrderProvider.shouldGenerateNoMoreDataEvent();
-    if (shouldGenerate) {
-      //throw event
-      LOG.info("No More data to process, Triggered No More Data Event");
-      BatchContext batchContext = context.startBatch();
-      CommonEvents.NO_MORE_DATA.create(context, batchContext).createAndSend();
-      context.processBatch(batchContext);
-    }
+  public static void generateNoMoreDataEvent(PushSource.Context context) {
+    LOG.info("No More data to process, Triggered No More Data Event");
+    BatchContext batchContext = context.startBatch();
+    CommonEvents.NO_MORE_DATA.create(context, batchContext).createAndSend();
+    context.processBatch(batchContext);
   }
 }

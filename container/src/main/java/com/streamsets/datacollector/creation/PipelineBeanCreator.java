@@ -18,12 +18,12 @@ package com.streamsets.datacollector.creation;
 import com.google.common.collect.ImmutableList;
 import com.streamsets.datacollector.config.ConfigDefinition;
 import com.streamsets.datacollector.config.PipelineConfiguration;
+import com.streamsets.datacollector.config.PipelineFragmentConfiguration;
 import com.streamsets.datacollector.config.PipelineGroups;
 import com.streamsets.datacollector.config.PipelineWebhookConfig;
 import com.streamsets.datacollector.config.RuleDefinitions;
 import com.streamsets.datacollector.config.ServiceConfiguration;
 import com.streamsets.datacollector.config.ServiceDefinition;
-import com.streamsets.datacollector.config.ServiceDependencyDefinition;
 import com.streamsets.datacollector.config.StageConfiguration;
 import com.streamsets.datacollector.config.StageDefinition;
 import com.streamsets.datacollector.config.StageLibraryDefinition;
@@ -35,14 +35,12 @@ import com.streamsets.datacollector.validation.IssueCreator;
 import com.streamsets.pipeline.api.Config;
 import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.Stage;
-import com.streamsets.pipeline.api.StageDef;
+import com.streamsets.pipeline.api.impl.Utils;
 import com.streamsets.pipeline.api.service.Service;
-import com.streamsets.pipeline.api.service.ServiceDependency;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -339,7 +337,7 @@ public abstract class PipelineBeanCreator {
     return new PipelineStageBeans(stageBeans);
   }
 
-  public ExecutionMode getExecutionMode(PipelineConfiguration pipelineConf, List<Issue> errors) {
+  public ExecutionMode getExecutionMode(PipelineFragmentConfiguration pipelineConf, List<Issue> errors) {
     ExecutionMode mode = null;
     String value = null;
     if (pipelineConf.getConfiguration("executionMode") != null) {
@@ -575,6 +573,7 @@ public abstract class PipelineBeanCreator {
       Map<String, Object> pipelineConstants,
       List<Issue> errors
   ) {
+    Utils.checkNotNull(serviceDef, "ServiceDefinition can't be null.");
     Service service;
     ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
     try {

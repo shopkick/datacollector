@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.lib.salesforce.ForceLookupConfigBean;
 
 @StageDef(
@@ -29,15 +29,15 @@ import com.streamsets.pipeline.lib.salesforce.ForceLookupConfigBean;
     label = "Salesforce Lookup",
     description = "Lookup records in Salesforce to enrich records",
     icon = "salesforce.png",
-    onlineHelpRefUrl = "index.html#Processors/SalesforceLookup.html#task_fhn_yrk_yx"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/SalesforceLookup.html#task_fhn_yrk_yx"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle
-@HideConfigs(
-    value = {
-        "forceConfig.useCompression", "forceConfig.showTrace"
-    }
-)
+@HideConfigs({
+  "forceConfig.useCompression",
+  "forceConfig.showTrace",
+  "forceConfig.cacheConfig.retryOnCacheMiss"
+})
 public class ForceLookupDProcessor extends DProcessor {
   @ConfigDefBean
   public ForceLookupConfigBean forceConfig;

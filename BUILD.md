@@ -22,11 +22,11 @@ To build the Data Collector you will need the following software :
 - Maven 3.3.9+
 - Node 0.10.32+1  (macOS, `brew install nodejs`       : Linux, [nodejs.org](https://nodejs.org) or [Packages from NodeSource](https://github.com/nodesource/distributions))
  - npm            (macOS, `brew install nodejs`       : Linux, [nodejs.org](https://nodejs.org) or [Packages from NodeSource](https://github.com/nodesource/distributions))
- - bower          (macOS, `npm -g install bower`      : Linux, `sudo npm -g install bower`)
+ - bower 1.8.2    (macOS, `npm -g install bower`      : Linux, `sudo npm -g install bower`)
  - grunt-cli      (macOS, `npm -g install grunt-cli`  : Linux, `sudo npm -g install grunt-cli`)
 - md5sum          (macOS, `brew install md5sha1sum`)
 
-Prerequisites for Data Collector :
+## Prerequisite Tasks for Building Data Collector
 
 If you're building master branch, then you need to install API and Plugin API modules to your maven cache first before compiling Data Collector. Released versions
 are published to public maven repositories and for them this step can be skipped. While Data Collector runs on Java 7, Java 8 is required for
@@ -34,29 +34,29 @@ running integration tests.
 
 - You can do that by getting the latest code from Github
 
-`git clone http://github.com/streamsets/datacollector-api`
+  `git clone http://github.com/streamsets/datacollector-api`
 
-and
+  and
 
-`git clone http://github.com/streamsets/datacollector-plugin-api`
+  `git clone http://github.com/streamsets/datacollector-plugin-api`
 
 - And install each of these to your local maven repository
 
-`mvn clean install -DskipTests`
+  `mvn clean install -DskipTests`
 
-Also you need to have datacollector-edge to be installed into your local maven repository.
+You also need the artifacts for datacollector-edge installed into your local maven repository.
 
-- First get the latest version of the datacollector-edge from Github
+- Ensure you have the [prerequisites listed for building datacollector-edge](https://github.com/streamsets/datacollector-edge/blob/master/BUILD.md#minimum-requirements)
 
- `git clone https://github.com/streamsets/datacollector-edge.git`
+- Get the latest version of datacollector-edge from Github
+
+  `git clone https://github.com/streamsets/datacollector-edge.git`
 
 - Gradle is used in this project as a build tool, so in order to install it to your local maven repository execute:
 
-  `./gradlew clean release`
+  `./gradlew clean buildAll publish`
 
-Follow these instructions to build the Data Collector :
-
-- Get the latest code from Github
+Finally, get the latest Data Collector code from Github
 
 `git clone http://github.com/streamsets/datacollector`
 
@@ -68,11 +68,11 @@ From within the Data Collector directory, execute:
 
 To start the Data Collector, execute:
 
-`dist/target/streamsets-datacollector-3.1.0.0-SNAPSHOT/streamsets-datacollector-3.1.0.0-SNAPSHOT/bin/streamsets dc`
+`dist/target/streamsets-datacollector-3.3.0/streamsets-datacollector-3.3.0/bin/streamsets dc`
 
 For Data Collector CLI, execute:
 
-`dist/target/streamsets-datacollector-3.1.0.0-SNAPSHOT/streamsets-datacollector-3.1.0.0-SNAPSHOT/bin/streamsets cli`
+`dist/target/streamsets-datacollector-3.3.0/streamsets-datacollector-3.3.0/bin/streamsets cli`
 
 To skip the RAT report during the build use the `-DskipRat` option.
 
@@ -84,12 +84,12 @@ From within the Data Collector directory, execute:
 
 The release tarball will be created at:
 
-`release/target/streamsets-datacollector-all-3.1.0.0-SNAPSHOT.tgz`
+`release/target/streamsets-datacollector-all-3.3.0.tgz`
 
 Extract the tarball to your preferred location :
 
-`tar xf streamsets-datacollector-all-3.1.0.0-SNAPSHOT.tgz`
+`tar xf streamsets-datacollector-all-3.3.0.tgz`
 
 To start the DataCollector, execute:
 
-`streamsets-datacollector-all-3.1.0.0-SNAPSHOT/bin/streamsets dc`
+`streamsets-datacollector-all-3.3.0/bin/streamsets dc`

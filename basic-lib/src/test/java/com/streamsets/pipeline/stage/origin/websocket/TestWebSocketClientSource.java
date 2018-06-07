@@ -20,7 +20,7 @@ import com.streamsets.pipeline.config.DataFormat;
 import com.streamsets.pipeline.lib.http.JerseyClientUtil;
 import com.streamsets.pipeline.sdk.PushSourceRunner;
 import com.streamsets.pipeline.stage.destination.http.HttpClientTarget;
-import com.streamsets.pipeline.stage.origin.websocketserver.WebSocketServerPushSource;
+import com.streamsets.pipeline.stage.origin.websocketserver.WebSocketServerDPushSource;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,7 +48,7 @@ public class TestWebSocketClientSource {
 
     WebSocketClientSource webSocketClientSource = PowerMockito.spy(new WebSocketClientSource(config));
 
-    PushSourceRunner runner = new PushSourceRunner.Builder(WebSocketServerPushSource.class, webSocketClientSource)
+    PushSourceRunner runner = new PushSourceRunner.Builder(WebSocketServerDPushSource.class, webSocketClientSource)
         .addOutputLane("a")
         .build();
 

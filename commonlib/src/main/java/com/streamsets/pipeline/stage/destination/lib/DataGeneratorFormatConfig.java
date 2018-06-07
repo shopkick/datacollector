@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.streamsets.pipeline.api.ConfigDef;
 import com.streamsets.pipeline.api.Dependency;
 import com.streamsets.pipeline.api.FieldSelectorModel;
+import com.streamsets.pipeline.api.ProtoConfigurableEntity;
 import com.streamsets.pipeline.api.Stage;
 import com.streamsets.pipeline.api.ValueChooserModel;
 import com.streamsets.pipeline.config.AvroCompression;
@@ -43,7 +44,6 @@ import com.streamsets.pipeline.config.WholeFileExistsAction;
 import com.streamsets.pipeline.config.WholeFileExistsActionChooserValues;
 import com.streamsets.pipeline.lib.el.MathEL;
 import com.streamsets.pipeline.lib.el.RecordEL;
-import com.streamsets.pipeline.lib.el.StringEL;
 import com.streamsets.pipeline.lib.generator.DataGeneratorFactory;
 import com.streamsets.pipeline.lib.generator.DataGeneratorFactoryBuilder;
 import com.streamsets.pipeline.lib.generator.binary.BinaryDataGeneratorFactory;
@@ -85,7 +85,7 @@ import static com.streamsets.pipeline.lib.util.AvroSchemaHelper.SCHEMA_SOURCE_KE
 import static com.streamsets.pipeline.lib.util.AvroSchemaHelper.SUBJECT_KEY;
 import static org.apache.commons.lang.StringUtils.isEmpty;
 
-public class DataGeneratorFormatConfig implements DataFormatConfig{
+public class DataGeneratorFormatConfig implements DataFormatConfig {
   private static final Logger LOG = LoggerFactory.getLogger(DataGeneratorFormatConfig.class);
 
   /* Charset Related -- Shown last */
@@ -444,8 +444,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
     displayPosition = 420,
     group = "DATA_FORMAT",
     dependsOn = "dataFormat^",
-    triggeredByValue = "BINARY",
-    elDefs = {StringEL.class}
+    triggeredByValue = "BINARY"
   )
   @FieldSelectorModel(singleValued = true)
   public String binaryFieldPath = "/";
@@ -482,7 +481,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   @ConfigDef(
       required = true,
       type = ConfigDef.Type.STRING,
-      elDefs = {RecordEL.class, StringEL.class, MathEL.class},
+      elDefs = {RecordEL.class, MathEL.class},
       evaluation = ConfigDef.Evaluation.EXPLICIT,
       defaultValue = "",
       description = "File Name Expression",
@@ -598,7 +597,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
 
   @Override
   public boolean init(
-      Stage.Context context,
+      ProtoConfigurableEntity.Context context,
       DataFormat dataFormat,
       String groupName,
       String configPrefix,
@@ -636,7 +635,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   }
 
   private boolean validateDataGenerator (
-      Stage.Context context,
+      ProtoConfigurableEntity.Context context,
       DataFormat dataFormat,
       String groupName,
       String configPrefix,
@@ -644,8 +643,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   ) {
     boolean valid = true;
 
-    DataGeneratorFactoryBuilder builder = new DataGeneratorFactoryBuilder(context,
-      dataFormat.getGeneratorFormat());
+    DataGeneratorFactoryBuilder builder = new DataGeneratorFactoryBuilder(context, dataFormat.getGeneratorFormat());
     if(charset == null || charset.trim().isEmpty()) {
       charset = StandardCharsets.UTF_8.name();
     }
@@ -730,7 +728,7 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   }
 
   private boolean configureAvroDataGenerator(
-      Stage.Context context,
+      ProtoConfigurableEntity.Context context,
       String configPrefix,
       List<Stage.ConfigIssue> issues,
       DataGeneratorFactoryBuilder builder
@@ -796,7 +794,9 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   }
 
   private boolean validateProtobufFormat(
-      Stage.Context context, String configPrefix, List<Stage.ConfigIssue> issues
+      ProtoConfigurableEntity.Context context,
+      String configPrefix,
+      List<Stage.ConfigIssue> issues
   ) {
     boolean valid = true;
     if (isEmpty(protoDescriptorFile)) {
@@ -827,7 +827,9 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   }
 
   private boolean validateBinaryFormat(
-      Stage.Context context, String configPrefix, List<Stage.ConfigIssue> issues
+      ProtoConfigurableEntity.Context context,
+      String configPrefix,
+      List<Stage.ConfigIssue> issues
   ) {
     // required field configuration to be set and it is "/" by default
     boolean valid = true;
@@ -845,7 +847,9 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
   }
 
   private boolean validateTextFormat(
-      Stage.Context context, String configPrefix, List<Stage.ConfigIssue> issues
+      ProtoConfigurableEntity.Context context,
+      String configPrefix,
+      List<Stage.ConfigIssue> issues
   ) {
     // required field configuration to be set and it is "/" by default
     boolean valid = true;
@@ -859,7 +863,11 @@ public class DataGeneratorFormatConfig implements DataFormatConfig{
     return valid;
   }
 
-  private boolean validateWholeFileFormat(Stage.Context context, String configPrefix, List<Stage.ConfigIssue> issues) {
+  private boolean validateWholeFileFormat(
+    ProtoConfigurableEntity.Context context,
+    String configPrefix,
+    List<Stage.ConfigIssue> issues
+  ) {
     boolean valid = true;
     if (isEmpty(fileNameEL)) {
       issues.add(

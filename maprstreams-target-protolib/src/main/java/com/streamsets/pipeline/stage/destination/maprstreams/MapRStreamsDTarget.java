@@ -20,7 +20,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.stage.destination.kafka.KafkaTarget;
 import com.streamsets.pipeline.stage.destination.kafka.KafkaTargetConfig;
 
@@ -28,9 +28,9 @@ import com.streamsets.pipeline.stage.destination.kafka.KafkaTargetConfig;
   version = 3,
   label = "MapR Streams Producer",
   description = "Writes data to MapR Streams",
-  icon = "mapr.png",
+  icon = "mapr_es.png",
     upgrader = MapRStreamsTargetUpgrader.class,
-  onlineHelpRefUrl = "index.html#Destinations/MapRStreamsProd.html#task_tbh_nbn_2v"
+  onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/MapRStreamsProd.html#task_tbh_nbn_2v"
 )
 @ConfigGroups(value = MapRStreamsTargetGroups.class)
 @GenerateResourceBundle

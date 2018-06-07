@@ -42,7 +42,7 @@ import java.util.Map;
 public class EventCreationIT extends BaseHiveIT {
 
   @SuppressWarnings("unchecked")
-  public List<Record> runNewTableRecord() throws Exception {
+  public List<EventRecord> runNewTableRecord() throws Exception {
     HiveMetastoreTarget hiveTarget = new HiveMetastoreTargetBuilder().build();
 
     TargetRunner runner = new TargetRunner.Builder(HiveMetastoreTarget.class, hiveTarget)
@@ -87,7 +87,7 @@ public class EventCreationIT extends BaseHiveIT {
     }
   }
 
-  public List<Record> runNewPartitionRecord() throws Exception {
+  public List<EventRecord> runNewPartitionRecord() throws Exception {
     HiveMetastoreTarget hiveTarget = new HiveMetastoreTargetBuilder().build();
 
     TargetRunner runner = new TargetRunner.Builder(HiveMetastoreTarget.class, hiveTarget)
@@ -120,13 +120,13 @@ public class EventCreationIT extends BaseHiveIT {
 
   @Test
   public void testEventOnNewTable() throws Exception {
-    List<Record> events = runNewTableRecord();
+    List<EventRecord> events = runNewTableRecord();
 
     Assert.assertNotNull(events);
     Assert.assertEquals(1, events.size());
 
-    Record event = events.get(0);
-    Assert.assertEquals("new-table", event.getHeader().getAttribute(EventRecord.TYPE));
+    EventRecord event = events.get(0);
+    Assert.assertEquals("new-table", event.getEventType());
     Assert.assertEquals("`default`.`tbl`", event.get("/table").getValueAsString());
 
     // Validate proper columns
@@ -153,7 +153,7 @@ public class EventCreationIT extends BaseHiveIT {
   @Test
   public void testNoRecordOnExistingTable() throws Exception {
     executeUpdate("CREATE TABLE `default`.`tbl` (name STRING, surname STRING) PARTITIONED BY(dt STRING) STORED AS AVRO");
-    List<Record> events = runNewTableRecord();
+    List<EventRecord> events = runNewTableRecord();
 
     Assert.assertNotNull(events);
     Assert.assertEquals(0, events.size());
@@ -162,22 +162,22 @@ public class EventCreationIT extends BaseHiveIT {
   @Test
   public void testEventOnNewColumn() throws Exception {
     executeUpdate("CREATE TABLE `default`.`tbl` (name STRING) PARTITIONED BY(dt STRING) STORED AS AVRO");
-    List<Record> events = runNewTableRecord();
+    List<EventRecord> events = runNewTableRecord();
 
     Assert.assertNotNull(events);
     Assert.assertEquals(1, events.size());
-    Assert.assertEquals("new-columns", events.get(0).getHeader().getAttribute(EventRecord.TYPE));
+    Assert.assertEquals("new-columns", events.get(0).getEventType());
     Assert.assertEquals("`default`.`tbl`", events.get(0).get("/table").getValueAsString());
   }
 
   @Test
   public void testEventOnNewPartition() throws Exception {
     executeUpdate("CREATE TABLE `default`.`tbl` (name STRING, surname STRING) PARTITIONED BY(dt STRING) STORED AS AVRO");
-    List<Record> events = runNewPartitionRecord();
+    List<EventRecord> events = runNewPartitionRecord();
 
     Assert.assertNotNull(events);
     Assert.assertEquals(1, events.size());
-    Assert.assertEquals("new-partition", events.get(0).getHeader().getAttribute(EventRecord.TYPE));
+    Assert.assertEquals("new-partition", events.get(0).getEventType());
     Assert.assertEquals("`default`.`tbl`", events.get(0).get("/table").getValueAsString());
   }
 
@@ -185,7 +185,7 @@ public class EventCreationIT extends BaseHiveIT {
   public void testNoEventOnExistingPartition() throws Exception {
     executeUpdate("CREATE TABLE `default`.`tbl` (name STRING, surname STRING) PARTITIONED BY(dt STRING) STORED AS AVRO");
     executeUpdate("ALTER TABLE `default`.`tbl` ADD PARTITION(dt = '2016')");
-    List<Record> events = runNewPartitionRecord();
+    List<EventRecord> events = runNewPartitionRecord();
 
     Assert.assertNotNull(events);
     Assert.assertEquals(0, events.size());

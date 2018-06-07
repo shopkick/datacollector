@@ -19,12 +19,15 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.streamsets.datacollector.config.PipelineConfiguration;
+import com.streamsets.datacollector.config.StageConfiguration;
 import com.streamsets.pipeline.api.impl.Utils;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PipelineConfigurationJson implements Serializable {
@@ -41,6 +44,7 @@ public class PipelineConfigurationJson implements Serializable {
     @JsonProperty("uuid") UUID uuid,
     @JsonProperty("configuration") List<ConfigConfigurationJson> configuration,
     @JsonProperty("uiInfo") Map<String, Object> uiInfo,
+    @JsonProperty("fragments") List<PipelineFragmentConfigurationJson> fragments,
     @JsonProperty("stages") List<StageConfigurationJson> stages,
     @JsonProperty("errorStage") StageConfigurationJson errorStage,
     @JsonProperty("info") PipelineInfoJson pipelineInfo,
@@ -59,6 +63,7 @@ public class PipelineConfigurationJson implements Serializable {
         description,
         BeanHelper.unwrapConfigConfiguration(configuration),
         uiInfo,
+        BeanHelper.unwrapPipelineFragementConfigurations(fragments),
         BeanHelper.unwrapStageConfigurations(stages),
         BeanHelper.unwrapStageConfiguration(errorStage),
         BeanHelper.unwrapStageConfiguration(statsAggregatorStage),
@@ -101,8 +106,26 @@ public class PipelineConfigurationJson implements Serializable {
     return BeanHelper.wrapPipelineInfo(pipelineConfiguration.getInfo());
   }
 
+  public List<PipelineFragmentConfigurationJson> getFragments() {
+    return BeanHelper.wrapPipelineFragmentConfigurations(pipelineConfiguration.getFragments());
+  }
+
   public List<StageConfigurationJson> getStages() {
-    return BeanHelper.wrapStageConfigurations(pipelineConfiguration.getStages());
+    if (CollectionUtils.isEmpty(pipelineConfiguration.getFragments())) {
+      return BeanHelper.wrapStageConfigurations(pipelineConfiguration.getStages());
+    } else {
+      // update original stages
+      List<StageConfiguration> originalStages = pipelineConfiguration.getOriginalStages()
+          .stream()
+          .map(stageConfiguration -> pipelineConfiguration.getStages()
+              .stream()
+              .filter(upgraded -> upgraded.getInstanceName().equals(stageConfiguration.getInstanceName()))
+              .findFirst()
+              .orElse(stageConfiguration)
+          )
+          .collect(Collectors.toList());
+      return BeanHelper.wrapStageConfigurations(originalStages);
+    }
   }
 
   public StageConfigurationJson getErrorStage() {

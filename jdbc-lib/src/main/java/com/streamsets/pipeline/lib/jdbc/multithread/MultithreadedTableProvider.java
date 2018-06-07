@@ -16,6 +16,7 @@
 package com.streamsets.pipeline.lib.jdbc.multithread;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -25,7 +26,6 @@ import com.streamsets.pipeline.api.impl.Utils;
 import com.streamsets.pipeline.lib.jdbc.multithread.util.OffsetQueryUtil;
 import com.streamsets.pipeline.stage.origin.jdbc.table.PartitioningMode;
 import com.streamsets.pipeline.stage.origin.jdbc.table.TableJdbcSource;
-import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +46,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Helper class for maintaining and organizing workable tables to threads
@@ -61,6 +62,9 @@ public final class MultithreadedTableProvider {
   private static final int SHARED_QUEUE_SIZE_FUDGE_FACTOR = 2;
 
   private Map<String, TableContext> tableContextMap;
+
+  private final Multimap<String, TableContext> remainingSchemasToTableContexts = HashMultimap.create();
+  private final Multimap<String, TableContext> completedSchemasToTableContexts = HashMultimap.create();
   private final BlockingQueue<TableRuntimeContext> sharedAvailableTablesQueue;
   private final Set<TableContext> tablesWithNoMoreData;
   private Map<Integer, Integer> threadNumToMaxTableSlots;
@@ -87,6 +91,7 @@ public final class MultithreadedTableProvider {
       BatchTableStrategy batchTableStrategy
   ) {
     this.tableContextMap = new ConcurrentHashMap<>(tableContextMap);
+    initializeRemainingSchemasToTableContexts();
     this.numThreads = numThreads;
     this.batchTableStrategy = batchTableStrategy;
 
@@ -113,6 +118,13 @@ public final class MultithreadedTableProvider {
 
     this.tablesWithNoMoreData = Sets.newConcurrentHashSet();
     this.threadNumToMaxTableSlots = threadNumToMaxTableSlots;
+  }
+
+  private void initializeRemainingSchemasToTableContexts() {
+    for (final TableContext tableContext : this.tableContextMap.values()) {
+      remainingSchemasToTableContexts.put(tableContext.getSchema(), tableContext);
+    }
+    completedSchemasToTableContexts.clear();
   }
 
   public void setTableContextMap(Map<String, TableContext> tableContextMap,
@@ -280,7 +292,7 @@ public final class MultithreadedTableProvider {
       if (fromStoredOffsets) {
         partitions = reconstructedPartitions.get(tableContext);
       }
-      if (CollectionUtils.isEmpty(partitions)) {
+      if (partitions == null  || partitions.isEmpty()) {
         partitions = Collections.singletonList(TableRuntimeContext.createInitialPartition(tableContext));
       }
 
@@ -339,6 +351,15 @@ public final class MultithreadedTableProvider {
 
   private String getCurrentThreadName() {
     return Thread.currentThread().getName();
+  }
+
+  @VisibleForTesting
+  Multimap<String, TableContext> getRemainingSchemasToTableContexts() {
+    return remainingSchemasToTableContexts;
+  }
+
+  public Multimap<String, TableContext> getCompletedSchemasToTableContexts() {
+    return completedSchemasToTableContexts;
   }
 
   @VisibleForTesting
@@ -680,6 +701,15 @@ public final class MultithreadedTableProvider {
     }
   }
 
+  void reportDataOrNoMoreData(
+      TableRuntimeContext tableRuntimeContext,
+      int recordCount,
+      int batchSize,
+      boolean resultSetEndReached
+  ) {
+    reportDataOrNoMoreData(tableRuntimeContext, recordCount, batchSize, resultSetEndReached, null, null, null);
+  }
+
   /**
    * Each {@link TableJdbcRunnable} worker thread can call this api to update
    * if there is data/no more data on the current table
@@ -688,7 +718,10 @@ public final class MultithreadedTableProvider {
       TableRuntimeContext tableRuntimeContext,
       int recordCount,
       int batchSize,
-      boolean resultSetEndReached
+      boolean resultSetEndReached,
+      AtomicBoolean tableFinished,
+      AtomicBoolean schemaFinished,
+      List<String> schemaFinishedTables
   ) {
 
     final TableContext sourceContext = tableRuntimeContext.getSourceTableContext();
@@ -711,7 +744,32 @@ public final class MultithreadedTableProvider {
 
     if (noMoreData) {
       if (tableExhausted) {
-        tablesWithNoMoreData.add(tableRuntimeContext.getSourceTableContext());
+        synchronized (this) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(
+                "Table {} exhausted",
+                sourceContext.getQualifiedName()
+            );
+          }
+
+          final boolean newlyFinished = tablesWithNoMoreData.add(sourceContext);
+
+          if (newlyFinished && tableFinished != null) {
+            tableFinished.set(true);
+          }
+
+          final boolean remainingSchemaChanged = remainingSchemasToTableContexts.remove(sourceContext.getSchema(), sourceContext);
+          completedSchemasToTableContexts.put(sourceContext.getSchema(), sourceContext);
+
+          if (remainingSchemaChanged && remainingSchemasToTableContexts.get(sourceContext.getSchema()).isEmpty() && schemaFinished != null) {
+            schemaFinished.set(true);
+            if (schemaFinishedTables != null) {
+              completedSchemasToTableContexts.get(sourceContext.getSchema()).forEach(
+                  t -> schemaFinishedTables.add(t.getTableName())
+              );
+            }
+          }
+        }
       }
     } else {
       //When we see a table with data, we mark isNoMoreDataEventGeneratedAlready to false
@@ -734,12 +792,13 @@ public final class MultithreadedTableProvider {
    * Generate event only if we haven't generate no more data event already
    * or we have seen a table with records after we generated an event before
    */
-  public boolean shouldGenerateNoMoreDataEvent() {
+  public synchronized boolean shouldGenerateNoMoreDataEvent() {
     boolean noMoreData = (
         !isNoMoreDataEventGeneratedAlready &&
             tablesWithNoMoreData.size() == tableContextMap.size());
     if (noMoreData) {
       tablesWithNoMoreData.clear();
+      initializeRemainingSchemasToTableContexts();
       isNoMoreDataEventGeneratedAlready = true;
     }
     return noMoreData;

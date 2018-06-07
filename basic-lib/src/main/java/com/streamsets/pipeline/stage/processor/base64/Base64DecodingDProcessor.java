@@ -21,14 +21,14 @@ import com.streamsets.pipeline.api.FieldSelectorModel;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 
 @StageDef(
     version = 1,
     label = "Base64 Field Decoder",
     icon = "base64decoder.png",
     description = "Decodes a Base64 encoded Byte Array field",
-    onlineHelpRefUrl = "index.html#Processors/Base64Decoder.html#task_pnn_5py_kv"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/Base64Decoder.html#task_pnn_5py_kv"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle

@@ -38,12 +38,12 @@ public class DependencyParser {
   /**
    * Classifiers that are not interesting.
    */
-  private static String CLASSIFIERS = "(-hadoop2|-shaded-protobuf|-tests|-native|\\.Final(-linux-x86_64)?|-shaded|-bin)?";
+  private static String CLASSIFIERS = "(-hadoop2|-shaded-protobuf|-tests|-native|\\.Final(-linux-x86_64)?|-shaded|-bin|\\.jre[0-9]|-api)?";
 
   /**
    * Various version suffixes that we support.
    */
-  private static String VERSION_SUFFIXES = "-b[0-9]+|-M[0-9]+|-m[0-9]|-pre[0-9]+|\\.RELEASE|-incubating|-beta|-indy|-SNAPSHOT|-GA|\\.hwx|\\.cloudera\\.?[0-9]|-jhyde|a|-cubrid|\\.Fork[0-9]+";
+  private static String VERSION_SUFFIXES = "-b[0-9]+|-M[0-9]+|-m[0-9]|-pre[0-9]+|\\.RELEASE|-incubating|-beta|-indy|-SNAPSHOT|\\.GA|-GA|\\.hwx|\\.cloudera\\.?[0-9]|-jhyde|a|-cubrid|\\.Fork[0-9]+|m|-jre";
 
   /**
    * Various supported version specifications
@@ -58,7 +58,7 @@ public class DependencyParser {
     "-([0-9.]+-kafka-[0-9.]+)",
     // MapR
     "-([0-9.]+-mapr-beta)",
-    "-([0-9.]+-mapr-[0-9.]+(-beta)?)",
+    "-([0-9.]+-mapr-[0-9.]+(-beta|-standalone)?)",
     "-([0-9.]+-mapr)",
     // Time based (like '3.0.0.v201112011016')
     "-([0-9.]+\\.v[0-9.]+)",
@@ -116,6 +116,8 @@ public class DependencyParser {
   static {
     // Jython
     SPECIAL_CASES.put("jython.jar", new Dependency("jython", ""));
+    // MapR
+    SPECIAL_CASES.put("mail.jar", new Dependency("mail", ""));
     // Various JDBC drivers from vendors who don't follow usual maven scheme
     SPECIAL_CASES.put("db2jcc4.jar", new Dependency("db2jcc4", ""));
     SPECIAL_CASES.put("nzjdbc3.jar", new Dependency("nzjdbc3", ""));

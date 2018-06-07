@@ -23,14 +23,14 @@
     <parent>
         <groupId>com.streamsets</groupId>
         <artifactId>streamsets-datacollector-stage-lib-parent</artifactId>
-        <version>3.1.0.0-SNAPSHOT</version>
+        <version>3.3.0</version>
         <relativePath>../stage-lib-parent</relativePath>
     </parent>
     <groupId>com.streamsets</groupId>
     <artifactId>streamsets-datacollector-cdh_5_11-lib</artifactId>
-    <version>3.1.0.0-SNAPSHOT</version>
+    <version>3.3.0</version>
     <description>StreamSets Data Collector CDH 5.11.2 Lib</description>
-    <name>StreamSets Data Collector 5.11.1 Lib</name>
+    <name>StreamSets Data Collector CDH 5.11.1 Lib</name>
     <packaging>jar</packaging>
 
     <properties>
@@ -42,7 +42,9 @@
         <solr.test.jetty.version>8.1.10.v20130312</solr.test.jetty.version>
         <thrift.version>0.9.3</thrift.version>
         <avro.version>1.7.7</avro.version>
-        <spark.version>1.6.0-cdh5.11.2</spark.version>
+        <spark.version>2.1.0.cloudera1</spark.version>
+        <jackson.version>2.2.3</jackson.version>
+        <netty.version>4.0.29.Final</netty.version>
     </properties>
 
     <repositories>
@@ -124,6 +126,20 @@
             <artifactId>streamsets-datacollector-cluster-hdfs-protolib</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-transport-native-epoll</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-transport-native-unix-common</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -155,13 +171,13 @@
 
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.10</artifactId>
+            <artifactId>spark-core_2.11</artifactId>
             <version>${spark.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-launcher_2.10</artifactId>
+            <artifactId>spark-launcher_2.11</artifactId>
             <version>${spark.version}</version>
         </dependency>
 
@@ -191,6 +207,16 @@
             <artifactId>streamsets-datacollector-cluster-bootstrap-api</artifactId>
             <scope>provided</scope>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -575,9 +601,36 @@
         <!-- test dependencies-->
         <dependency>
             <groupId>com.streamsets</groupId>
+            <artifactId>streamsets-datacollector-stagesupport</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.streamsets</groupId>
             <artifactId>streamsets-datacollector-commonlib</artifactId>
             <version>${project.version}</version>
             <type>test-jar</type>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-transport-native-epoll</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-transport-native-unix-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.streamsets</groupId>
+            <artifactId>streamsets-datacollector-dir-spooler-protolib</artifactId>
+            <type>test-jar</type>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
 

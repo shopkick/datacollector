@@ -24,7 +24,7 @@ import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.el.RecordEL;
 import com.streamsets.pipeline.lib.el.TimeEL;
 import com.streamsets.pipeline.lib.el.TimeNowEL;
@@ -46,7 +46,7 @@ import java.util.List;
     description = "Insert, update, delete data to a JDBC destination.",
     upgrader = JdbcTargetUpgrader.class,
     icon = "rdbms.png",
-    onlineHelpRefUrl = "index.html#Destinations/JDBCProducer.html#task_cx3_lhh_ht"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/JDBCProducer.html#task_cx3_lhh_ht"
 )
 @ConfigGroups(value = Groups.class)
 @HideConfigs(value = {

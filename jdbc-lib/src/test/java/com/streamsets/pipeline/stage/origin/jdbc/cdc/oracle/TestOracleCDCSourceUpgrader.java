@@ -16,6 +16,7 @@
 package com.streamsets.pipeline.stage.origin.jdbc.cdc.oracle;
 
 import com.streamsets.pipeline.api.Config;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.UnsupportedFieldTypeValues;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -74,5 +75,15 @@ public class TestOracleCDCSourceUpgrader {
     Assert.assertEquals(1, configs.size());
     Assert.assertEquals(configs.get(0).getName(), "oracleCDCConfigBean.sendUnsupportedFields");
     Assert.assertEquals(configs.get(0).getValue(), false);
+  }
+
+  @Test
+  public void upgradeV6TOV7() throws Exception {
+    List<Config> configs = new ArrayList<>(1);
+
+    configs = new OracleCDCSourceUpgrader().upgrade("a", "b", "v", 6, 7, configs);
+    Assert.assertEquals(1, configs.size());
+    Assert.assertEquals(configs.get(0).getName(), "oracleCDCConfigBean.parseQuery");
+    Assert.assertEquals(configs.get(0).getValue(), true);
   }
 }

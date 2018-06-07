@@ -23,12 +23,12 @@
   <parent>
     <groupId>com.streamsets</groupId>
     <artifactId>streamsets-datacollector-stage-lib-parent</artifactId>
-    <version>3.1.0.0-SNAPSHOT</version>
+    <version>3.3.0</version>
     <relativePath>../stage-lib-parent</relativePath>
   </parent>
   <groupId>com.streamsets</groupId>
   <artifactId>streamsets-datacollector-salesforce-lib</artifactId>
-  <version>3.1.0.0-SNAPSHOT</version>
+  <version>3.3.0</version>
   <description>StreamSets Data Collector Salesforce Library</description>
   <name>StreamSets Data Collector Salesforce Library</name>
   <packaging>jar</packaging>
@@ -214,13 +214,6 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util-ajax</artifactId>
       <version>${jetty.version}</version>
-    </dependency>
-
-    <!-- Fluent -->
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>fluent-hc</artifactId>
-      <version>${fluent.version}</version>
     </dependency>
   </dependencies>
 

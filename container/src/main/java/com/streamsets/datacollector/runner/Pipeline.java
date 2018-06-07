@@ -402,6 +402,12 @@ public class Pipeline {
 
   public void destroy(boolean productionExecution, PipelineStopReason stopReason) throws StageException, PipelineRuntimeException {
     LOG.info("Destroying pipeline with reason={}", stopReason.name());
+
+    // Ensure that all stages are properly stopped. This method is usually called by the framework when a pipeline
+    // stops properly (in order to force the pipeline to stop). However if the pipeline is failing (random runtime
+    // exception), then we need to make sure of that ourselves here.
+    stop();
+
     Throwable exception = null;
 
     try {
@@ -418,7 +424,7 @@ public class Pipeline {
     // Lifecycle event handling
     if(startEventStage != null) {
       try {
-        startEventStage.destroy(null, null);
+        startEventStage.destroy(null, null, null);
       } catch (Exception ex) {
         String msg = Utils.format("Exception thrown during pipeline start event handler destroy: {}", ex);
         LOG.error(msg, ex);
@@ -466,7 +472,7 @@ public class Pipeline {
 
       // Destroy
       try {
-        stopEventStage.destroy(null, null);
+        stopEventStage.destroy(null, null, null);
       } catch (Exception ex) {
         String msg = Utils.format("Exception thrown during pipeline stop event handler destroy: {}", ex);
         LOG.error(msg, ex);
@@ -488,7 +494,9 @@ public class Pipeline {
       lineagePublisherTask.publishEvent(event);
     }
 
-    LOG.info("Pipeline finished destroying with final reason={}", stopReason.name());
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Pipeline finished destroying with final reason={}", stopReason.name());
+    }
     // Propagate exception if it was thrown
     if(exception != null) {
       Throwables.propagateIfInstanceOf(exception, StageException.class);
@@ -948,17 +956,28 @@ public class Pipeline {
     long startTime,
     LineagePublisherTask lineagePublisherTask
   ) {
+    EmailSender emailSender = new EmailSender(configuration);
+
     // Create runtime structures for all services of this stage
     Map<Class, ServiceRuntime> services = new HashMap<>();
     for(ServiceBean serviceBean: stageBean.getServices()) {
       ServiceRuntime runtime = new ServiceRuntime(pipelineBean, serviceBean);
 
       runtime.setContext(new ServiceContext(
+        configuration,
+        pipelineBean.getConfig().constants,
+        emailSender,
+        pipelineRunner.getMetrics(),
+        pipelineName,
+        pipelineRev,
+        runnerId,
         stageBean.getConfiguration().getInstanceName(),
-        serviceBean.getDefinition().getClassName()
+        runtime,
+        serviceBean.getDefinition().getClassName(),
+        pipelineRunner.getRuntimeInfo().getResourcesDir()
       ));
 
-      services.put(serviceBean.getDefinition().getKlass(), runtime);
+      services.put(serviceBean.getDefinition().getProvides(), runtime);
     }
 
     // Create StageRuntime itself
@@ -986,7 +1005,7 @@ public class Pipeline {
         getExecutionMode(pipelineConfiguration),
         getDeliveryGuarantee(pipelineConfiguration),
         pipelineRunner.getRuntimeInfo(),
-        new EmailSender(configuration),
+        emailSender,
         configuration,
         runnerSharedMap,
         startTime,

@@ -79,6 +79,7 @@ public class MetricsEventRunnable implements Runnable {
   private static final String PIPELINE_COMMIT_ID = "PIPELINE_COMMIT_ID";
   private static final String JOB_ID = "JOB_ID";
   private static final String UPDATE_WAIT_TIME_MS = "UPDATE_WAIT_TIME_MS";
+  public static final String TIME_SERIES_ANALYSIS = "TIME_SERIES_ANALYSIS";
   private static final String SDC = "sdc";
   private static final String X_REQUESTED_BY = "X-Requested-By";
   private static final String X_SS_APP_AUTH_TOKEN = "X-SS-App-Auth-Token";
@@ -106,6 +107,8 @@ public class MetricsEventRunnable implements Runnable {
   private String jobId;
   private Integer waitTimeBetweenUpdates;
   private final int retryAttempts = 5;
+  private boolean timeSeriesAnalysis = true;
+  private boolean isPipelineStopped = false;
   private WebTarget webTarget;
   private Stopwatch stopwatch = null;
 
@@ -139,6 +142,7 @@ public class MetricsEventRunnable implements Runnable {
     if (isDPMPipeline) {
       // Send final metrics to DPM on stop
       this.stopwatch = null;
+      this.isPipelineStopped = true;
       this.run();
     }
   }
@@ -181,13 +185,16 @@ public class MetricsEventRunnable implements Runnable {
         if (hasMetricEventListeners(state)) {
           eventListenerManager.broadcastMetrics(name, metricsJSONStr);
         }
-        if (isStatAggregationEnabled()) {
+        // don't queue stats record when pipeline is stopped as runner is not going to process any more batches
+        if (isStatAggregationEnabled() && !isPipelineStopped) {
           AggregatorUtil.enqueStatsRecord(
             AggregatorUtil.createMetricJsonRecord(
                 runtimeInfo.getId(),
                 runtimeInfo.getMasterSDCId(),
                 pipelineConfiguration.getMetadata(),
                 false, // isAggregated - no its not aggregated
+                timeSeriesAnalysis,
+                false,
                 metricsJSONStr
             ),
             statsQueue,
@@ -311,6 +318,13 @@ public class MetricsEventRunnable implements Runnable {
                 waitTimeBetweenUpdates = 15000;
               }
               break;
+            case TIME_SERIES_ANALYSIS:
+              if (pipelineConfigBean.constants.get(key) != null) {
+                timeSeriesAnalysis = (Boolean) pipelineConfigBean.constants.get(key);
+              } else {
+                timeSeriesAnalysis = true;
+              }
+              break;
           }
         }
 
@@ -347,6 +361,7 @@ public class MetricsEventRunnable implements Runnable {
       }
       metadata.put(DPM_PIPELINE_COMMIT_ID, pipelineCommitId);
       metadata.put(DPM_JOB_ID, jobId);
+      metadata.put(AggregatorUtil.TIME_SERIES_ANALYSIS, String.valueOf(timeSeriesAnalysis));
       sdcMetricsJson.setMetadata(metadata);
 
       sendUpdate(ImmutableList.of(sdcMetricsJson));

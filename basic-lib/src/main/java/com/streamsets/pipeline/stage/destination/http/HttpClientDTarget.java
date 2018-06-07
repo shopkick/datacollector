@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.http.Groups;
 
 @StageDef(
@@ -30,7 +30,7 @@ import com.streamsets.pipeline.lib.http.Groups;
     description = "Uses an HTTP client to write data.",
     icon = "httpclient.png",
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Destinations/HTTPClient.html#task_bdf_fk5_lz",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/HTTPClient.html#task_bdf_fk5_lz",
     execution = {
         ExecutionMode.STANDALONE,
         ExecutionMode.CLUSTER_BATCH,

@@ -23,8 +23,8 @@ import com.streamsets.pipeline.api.StatsAggregatorStage;
 
 @StageDef(
     version = 1,
-    label = "Write to DPM directly",
-    description = "Writes pipeline statistics to DPM directly without any aggregation",
+    label = "Write to Control Hub directly",
+    description = "Writes pipeline statistics to Control Hub directly without any aggregation",
     icon="",
     execution = {
         ExecutionMode.STANDALONE,

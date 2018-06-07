@@ -29,9 +29,9 @@ import com.streamsets.pipeline.stage.origin.multikafka.MultiKafkaRawSourcePrevie
     label = "MapR Multitopic Streams Consumer",
     description = "Reads data from multiple topics of a MapR streams",
     execution = ExecutionMode.STANDALONE,
-    icon = "mapr.png",
+    icon = "mapr_es.png",
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Origins/MapRStreamsMultiConsumer.html#task_pkc_lww_lbb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/MapRStreamsMultiConsumer.html#task_pkc_lww_lbb"
 )
 @RawSource(rawSourcePreviewer = MultiKafkaRawSourcePreviewer.class,  mimeType = "*/*")
 @HideConfigs({

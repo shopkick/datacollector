@@ -16,7 +16,6 @@
 package com.streamsets.lib.security.http;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import com.streamsets.datacollector.util.Configuration;
 import com.streamsets.pipeline.api.impl.Utils;
 import org.slf4j.Logger;
@@ -38,6 +37,8 @@ public class RemoteSSOService extends AbstractSSOService {
   public static final String SECURITY_SERVICE_COMPONENT_ID_CONFIG = CONFIG_PREFIX + "componentId";
   public static final String SECURITY_SERVICE_CONNECTION_TIMEOUT_CONFIG = CONFIG_PREFIX + "connectionTimeout.millis";
   public static final String DPM_DEPLOYMENT_ID = "dpm.remote.deployment.id";
+  public static final boolean DPM_USER_ALIAS_NAME_ENABLED_DEFAULT = false;
+  public static final String DPM_USER_ALIAS_NAME_ENABLED = CONFIG_PREFIX + "alias.name.enabled";
 
   public static final int DEFAULT_SECURITY_SERVICE_CONNECTION_TIMEOUT = 10000;
   public static final String DPM_ENABLED = CONFIG_PREFIX + "enabled";

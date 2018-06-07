@@ -42,8 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.streamsets.pipeline.stage.processor.fieldtypeconverter.Errors.CONVERTER_03;
+import java.util.Set;
 
 public class FieldTypeConverterProcessor extends SingleLaneRecordProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(FieldTypeConverterProcessor.class);
@@ -83,7 +82,8 @@ public class FieldTypeConverterProcessor extends SingleLaneRecordProcessor {
         ZonedDateTime.parse(now.format(config.getFormatter()), config.getFormatter());
       } catch (DateTimeParseException ex) {
         return Optional.of(
-            getContext().createConfigIssue("TYPE_CONVERSION", "fieldTypeConverterConfigs", CONVERTER_03));
+            getContext().createConfigIssue(
+                "TYPE_CONVERSION", "fieldTypeConverterConfigs", Errors.CONVERTER_03));
       }
     }
     return Optional.empty();
@@ -135,13 +135,15 @@ public class FieldTypeConverterProcessor extends SingleLaneRecordProcessor {
   }
 
   private void processByField(Record record, SingleLaneBatchMaker batchMaker) throws StageException {
+    final Set<String> fieldPaths = record.getEscapedFieldPaths();
     for(FieldTypeConverterConfig fieldTypeConverterConfig : fieldTypeConverterConfigs) {
       for(String fieldToConvert : fieldTypeConverterConfig.fields) {
         final List<String> matchingFieldPaths = new LinkedList<>(FieldPathExpressionUtil.evaluateMatchingFieldPaths(
             fieldToConvert,
             fieldPathEval,
             fieldPathVars,
-            record
+            record,
+            fieldPaths
         ));
         if (matchingFieldPaths.isEmpty()) {
           // FieldPathExpressionUtil.evaluateMatchingFieldPaths does NOT return the supplied param in its result
@@ -216,6 +218,9 @@ public class FieldTypeConverterProcessor extends SingleLaneRecordProcessor {
     }
 
     if (field.getType() == Field.Type.ZONED_DATETIME) {
+      if (!converterConfig.targetType.isOneOf(Field.Type.STRING, Field.Type.ZONED_DATETIME)) {
+        throw new OnRecordErrorException(Errors.CONVERTER_04, converterConfig.targetType);
+      }
       return Field.create(converterConfig.getFormatter().format(field.getValueAsZonedDateTime()));
     }
 

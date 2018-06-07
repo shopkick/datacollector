@@ -22,7 +22,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 import com.streamsets.pipeline.lib.mqtt.Groups;
 import com.streamsets.pipeline.lib.mqtt.MqttClientConfigBean;
 
@@ -39,7 +39,7 @@ import com.streamsets.pipeline.lib.mqtt.MqttClientConfigBean;
         ExecutionMode.EDGE
     },
     recordsByRef = true,
-    onlineHelpRefUrl = "index.html#Destinations/MQTTPublisher.html#task_vbn_cyt_lz",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/MQTTPublisher.html#task_vbn_cyt_lz",
     upgrader = MqttClientTargetUpgrader.class
 )
 @ConfigGroups(Groups.class)

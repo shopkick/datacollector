@@ -22,13 +22,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>com.streamsets</groupId>
-    <artifactId>streamsets-datacollector-stage-lib-parent</artifactId>
-    <version>3.1.0.0-SNAPSHOT</version>
-    <relativePath>../stage-lib-parent</relativePath>
+    <artifactId>streamsets-datacollector-hdp-stagelib-base</artifactId>
+    <version>3.3.0</version>
+    <relativePath>../hdp-stagelib-base</relativePath>
   </parent>
   <groupId>com.streamsets</groupId>
   <artifactId>streamsets-datacollector-hdp_2_4-lib</artifactId>
-  <version>3.1.0.0-SNAPSHOT</version>
+  <version>3.3.0</version>
   <description>StreamSets Data Collector HDP 2.4.0 Lib</description>
   <name>StreamSets Data Collector HDP 2.4.0 Lib</name>
   <packaging>jar</packaging>
@@ -38,7 +38,6 @@
     <hadoop.version>2.7.1.2.4.2.0-258</hadoop.version>
     <hbase.version>1.1.2.2.4.2.0-258</hbase.version>
     <kafka.version>0.9.0.2.4.2.0-258</kafka.version>
-    <spark.version>1.6.1.2.4.2.0-258</spark.version>
     <thrift.version>0.9.0</thrift.version>
     <zk-client.version>0.5-1</zk-client.version>
     <avro.version>1.7.7</avro.version>
@@ -47,14 +46,6 @@
   </properties>
 
   <dependencies>
-
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-kafka_2.10</artifactId>
-      <version>${spark.version}</version>
-      <scope>compile</scope>
-    </dependency>
-
     <!-- Provided Dependencies -->
     <dependency>
       <groupId>com.streamsets</groupId>
@@ -84,17 +75,8 @@
     <dependency>
       <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-sdk</artifactId>
+      <version>${project.version}</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.streamsets</groupId>
@@ -107,17 +89,6 @@
       <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-hdfs-protolib</artifactId>
       <version>${project.version}</version>
-      <scope>compile</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <dependency>
@@ -137,14 +108,7 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
       <version>${avro.version}</version>
-      <scope>compile</scope>
       <classifier>hadoop2</classifier>
-      <exclusions>
-        <exclusion>
-          <groupId>org.mortbay.jetty</groupId>
-          <artifactId>servlet-api</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -303,12 +267,6 @@
     </dependency>
     <dependency>
       <groupId>com.streamsets</groupId>
-      <artifactId>streamsets-datacollector-cluster-kafka-protolib</artifactId>
-      <version>${project.version}</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-kafka_source-protolib</artifactId>
       <version>${project.version}</version>
       <scope>compile</scope>
@@ -401,16 +359,29 @@
     </dependency>
     <dependency>
       <groupId>com.streamsets</groupId>
+      <artifactId>streamsets-datacollector-stagesupport</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-commonlib</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.streamsets</groupId>
+      <artifactId>streamsets-datacollector-dir-spooler-protolib</artifactId>
+      <type>test-jar</type>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
-      <scope>test</scope>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.bouncycastle</groupId>

@@ -19,9 +19,10 @@
 
 angular
   .module('dataCollectorApp.home')
-
-  .controller('HeaderController', function ($scope, $rootScope, $timeout, _, api, $translate, $location, authService,
-                                           pipelineService, pipelineConstant, $modal, $q, $route) {
+  .controller('HeaderController', function (
+    $scope, $rootScope, $timeout, _, api, $translate, $location, authService, pipelineService, pipelineConstant,
+    $modal, $q, $route
+  ) {
 
     var pipelineValidationInProgress;
     var pipelineValidationSuccess;
@@ -301,10 +302,10 @@ angular
       resetOffset: function() {
         $scope.trackEvent(pipelineConstant.BUTTON_CATEGORY, pipelineConstant.CLICK_ACTION, 'Reset Offset', 1);
 
-        var originStageInstance = $scope.pipelineConfig.stages[0],
-            originStageDef = _.find($scope.stageLibraries, function(stageDef) {
-              return stageDef.name === originStageInstance.stageName;
-            });
+        var originStageInstance = $scope.stageInstances[0];
+        var originStageDef = _.find($scope.stageLibraries, function (stageDef) {
+          return stageDef.name === originStageInstance.stageName;
+        });
 
         $modal.open({
           templateUrl: 'app/home/resetOffset/resetOffset.tpl.html',
@@ -345,7 +346,7 @@ angular
        */
       autoArrange: function() {
         $scope.trackEvent(pipelineConstant.BUTTON_CATEGORY, pipelineConstant.CLICK_ACTION, 'Auto Arrange', 1);
-        pipelineService.autoArrange($scope.pipelineConfig);
+        pipelineService.autoArrange($scope.stageInstances);
         $scope.refreshGraph();
       },
 
@@ -410,7 +411,7 @@ angular
 
               $timeout(function() {
                 $rootScope.common.successList.push({
-                  message: 'Successfully Published Pipeline to SCH Pipeline Repository: ' +
+                  message: 'Successfully Published Pipeline to Control Hub Pipeline Repository: ' +
                   authService.getRemoteBaseUrl() + ' New Pipeline Commit Version - ' + metadata['dpm.pipeline.version']
                 });
               });
@@ -471,6 +472,21 @@ angular
        */
       isEdgePipeline: function() {
         return $scope.executionMode === 'EDGE'
+      },
+
+      publishToEdge: function () {
+        $scope.trackEvent(pipelineConstant.BUTTON_CATEGORY, pipelineConstant.CLICK_ACTION, 'Publish Pipeline to Edge', 1);
+        api.pipelineAgent.publishPipelinesToEdge([$scope.activeConfigInfo.pipelineId])
+          .then(
+            function (res) {
+              $rootScope.common.successList.push({
+                message: 'Successfully published pipeline to Data Collector Edge'
+              });
+            },
+            function (res) {
+              $rootScope.common.errors = [res.data];
+            }
+          );
       }
     });
 
@@ -521,8 +537,6 @@ angular
           $scope.common.errors = [res.data];
         });
     };
-
-
 
     $scope.$on('$destroy', function() {
       if (validateConfigStatusTimer) {

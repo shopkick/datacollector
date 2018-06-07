@@ -30,23 +30,25 @@ import com.streamsets.pipeline.api.impl.Utils;
 import com.streamsets.pipeline.lib.jdbc.HikariPoolConfigBean;
 import com.streamsets.pipeline.lib.jdbc.JdbcErrors;
 import com.streamsets.pipeline.lib.jdbc.JdbcUtil;
+import com.streamsets.pipeline.lib.jdbc.PrecisionAndScale;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.DateTimeColumnHandler;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.ParseUtil;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.SQLListener;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.UnparseableSQLException;
+import com.streamsets.pipeline.lib.jdbc.parser.sql.UnsupportedFieldTypeException;
 import com.streamsets.pipeline.lib.operation.OperationType;
 import com.streamsets.pipeline.stage.common.DefaultErrorRecordHandler;
 import com.streamsets.pipeline.stage.common.ErrorRecordHandler;
 import com.streamsets.pipeline.stage.origin.jdbc.cdc.ChangeTypeValues;
+import com.streamsets.pipeline.stage.origin.jdbc.cdc.SchemaTableConfigBean;
 import com.zaxxer.hikari.HikariDataSource;
 import net.jcip.annotations.GuardedBy;
-import org.antlr.v4.runtime.ANTLRInputStream;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import plsql.plsqlLexer;
-import plsql.plsqlParser;
 
 import java.io.File;
 import java.io.IOException;
@@ -62,7 +64,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.text.ParseException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -79,6 +80,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
@@ -113,7 +115,7 @@ import static com.streamsets.pipeline.lib.jdbc.OracleCDCOperationCode.OPERATION;
 import static com.streamsets.pipeline.lib.jdbc.OracleCDCOperationCode.ROLLBACK_CODE;
 import static com.streamsets.pipeline.lib.jdbc.OracleCDCOperationCode.SELECT_FOR_UPDATE_CODE;
 import static com.streamsets.pipeline.lib.jdbc.OracleCDCOperationCode.UPDATE_CODE;
-import static com.streamsets.pipeline.stage.origin.jdbc.cdc.oracle.DateTimeColumnHandler.DT_FORMATTER;
+import static com.streamsets.pipeline.lib.jdbc.parser.sql.ParseUtil.JDBCTypeNames;
 import static com.streamsets.pipeline.stage.origin.jdbc.cdc.oracle.Groups.CDC;
 import static com.streamsets.pipeline.stage.origin.jdbc.cdc.oracle.Groups.CREDENTIALS;
 
@@ -130,7 +132,7 @@ public class OracleCDCSource extends BaseSource {
   // (which means we are executing for the first time), or it is no longer valid, so select
   // only the ones that are > than the cachedSCN.
   private static final String GET_OLDEST_SCN =
-      "SELECT FIRST_CHANGE#, STATUS from GV$ARCHIVED_LOG WHERE STATUS = 'A' ORDER BY FIRST_CHANGE#";
+      "SELECT FIRST_CHANGE#, STATUS from GV$ARCHIVED_LOG WHERE STATUS = 'A' AND FIRST_CHANGE# > ? ORDER BY FIRST_CHANGE#";
   private static final String SWITCH_TO_CDB_ROOT = "ALTER SESSION SET CONTAINER = CDB$ROOT";
   private static final String ROWID = "ROWID";
   private static final String PREFIX = "oracle.cdc.";
@@ -168,17 +170,15 @@ public class OracleCDCSource extends BaseSource {
   private static final String DISCARDING_RECORD_AS_CONFIGURED = ". Discarding record as configured";
   private static final String UNSUPPORTED_DISCARD = JDBC_85.getMessage() + DISCARDING_RECORD_AS_CONFIGURED;
   private static final String UNSUPPORTED_SEND_TO_PIPELINE = JDBC_85.getMessage() + ". Sending to pipeline as configured";
-  private static final String GENERATED_RECORD = "Generated Record: '{}'";
-  public static final String FOUND_RECORDS_IN_TRANSACTION = "Found {} records in transaction";
+  private static final String GENERATED_RECORD = "Generated Record: '{}' in transaction Id {}";
+  public static final String FOUND_RECORDS_IN_TRANSACTION = "Found {} records in transaction ID {}";
   public static final String STARTED_LOG_MINER_WITH_START_SCN_AND_END_SCN = "Started LogMiner with start SCN: {} and end SCN: {}";
   public static final String REDO_SELECT_QUERY = "Redo select query for selectFromLogMnrContents = {}";
   public static final String CURRENT_LATEST_SCN_IS = "Current latest SCN is: {}";
 
-  // https://docs.oracle.com/cd/E16338_01/appdev.112/e13995/constant-values.html#oracle_jdbc_OracleTypes_TIMESTAMPTZ
-  private static final int TIMESTAMP_TZ_TYPE = -101;
-  // https://docs.oracle.com/cd/E16338_01/appdev.112/e13995/constant-values.html#oracle_jdbc_OracleTypes_TIMESTAMPLTZ
-  private static final int TIMESTAMP_LTZ_TYPE = -102;
+  public static final int LOGMINER_START_MUST_BE_CALLED = 1306;
   private DateTimeColumnHandler dateTimeColumnHandler;
+
 
   private boolean sentInitialSchemaEvent = false;
   private File txnBufferLocation;
@@ -188,10 +188,12 @@ public class OracleCDCSource extends BaseSource {
   private static final int QUERY_TIMEOUT = 1013;
 
   private final Lock bufferedRecordsLock = new ReentrantLock();
-  private final BlockingQueue<StageException> stageExceptions = new LinkedBlockingQueue<>();
+  private final BlockingQueue<StageException> stageExceptions = new LinkedBlockingQueue<>(1);
 
   @GuardedBy(value = "bufferedRecordsLock")
   private final Map<TransactionIdKey, HashQueue<RecordSequence>> bufferedRecords = new HashMap<>();
+
+  private final AtomicReference<BigDecimal> cachedSCNForRedoLogs = new AtomicReference<>(BigDecimal.ZERO);
 
   private BlockingQueue<RecordOffset> recordQueue;
 
@@ -210,18 +212,6 @@ public class OracleCDCSource extends BaseSource {
     TRUNCATE,
     STARTUP, // Represents event sent at startup.
     UNKNOWN
-  }
-
-  private static final Map<Integer, String> JDBCTypeNames = new HashMap<>();
-
-  static {
-    for (java.lang.reflect.Field jdbcType : Types.class.getFields()) {
-      try {
-        JDBCTypeNames.put((Integer) jdbcType.get(null), jdbcType.getName());
-      } catch (Exception ex) {
-        LOG.warn("JDBC Type Name access error", ex);
-      }
-    }
   }
 
   private static final String GET_TIMESTAMPS_FROM_LOGMNR_CONTENTS = "SELECT TIMESTAMP FROM V$LOGMNR_CONTENTS ORDER BY TIMESTAMP";
@@ -297,7 +287,6 @@ public class OracleCDCSource extends BaseSource {
       try {
         if (!generationStarted) {
           startGeneratorThread(lastSourceOffset);
-          generationStarted = true;
         }
       } catch (StageException ex) {
         LOG.error("Error while attempting to produce records", ex);
@@ -344,44 +333,49 @@ public class OracleCDCSource extends BaseSource {
   }
 
   private void startGeneratorThread(String lastSourceOffset) throws StageException, SQLException {
-    resetDBConnectionsIfRequired();
-    Offset offset;
+    Offset offset = null;
     LocalDateTime startTimestamp;
-    startLogMnrForRedoDict();
-    if (!StringUtils.isEmpty(lastSourceOffset)) {
-      offset = new Offset(lastSourceOffset);
-      if (lastSourceOffset.startsWith("v3")) {
-        if (!useLocalBuffering) {
-          throw new StageException(JDBC_82);
-        }
-        startTimestamp = offset.timestamp;
-      } else {
-        if (useLocalBuffering) {
-          throw new StageException(JDBC_83);
-        }
-        startTimestamp = getDateForSCN(new BigDecimal(offset.scn));
-        offset.timestamp = startTimestamp;
-      }
-      adjustStartTimeAndStartLogMnr(startTimestamp);
-    } else { // reset the start date only if it not set.
-      if (configBean.startValue != StartValues.SCN) {
-        LocalDateTime startDate;
-        if (configBean.startValue == StartValues.DATE) {
-          startDate = LocalDateTime.parse(configBean.startDate, DT_FORMATTER);
+    try {
+      startLogMnrForRedoDict();
+      if (!StringUtils.isEmpty(lastSourceOffset)) {
+        offset = new Offset(lastSourceOffset);
+        if (lastSourceOffset.startsWith("v3")) {
+          if (!useLocalBuffering) {
+            throw new StageException(JDBC_82);
+          }
+          startTimestamp = offset.timestamp.minusSeconds(configBean.txnWindow);
         } else {
-          startDate = nowAtDBTz();
+          if (useLocalBuffering) {
+            throw new StageException(JDBC_83);
+          }
+          startTimestamp = getDateForSCN(new BigDecimal(offset.scn));
+          offset.timestamp = startTimestamp;
         }
-        startDate = adjustStartTimeAndStartLogMnr(startDate);
-        offset = new Offset(version, startDate, ZERO, 0);
-      } else {
-        BigDecimal startCommitSCN = new BigDecimal(configBean.startSCN);
-        startLogMnrSCNToDate.setBigDecimal(1, startCommitSCN);
-        final LocalDateTime start = getDateForSCN(startCommitSCN);
-        LocalDateTime endTime = getEndTimeForStartTime(start);
-        startLogMnrSCNToDate.setString(2, endTime.format(DT_FORMATTER));
-        startLogMnrSCNToDate.execute();
-        offset = new Offset(version, start, startCommitSCN.toPlainString(), 0);
+        adjustStartTimeAndStartLogMnr(startTimestamp);
+      } else { // reset the start date only if it not set.
+        if (configBean.startValue != StartValues.SCN) {
+          LocalDateTime startDate;
+          if (configBean.startValue == StartValues.DATE) {
+            startDate = LocalDateTime.parse(configBean.startDate, dateTimeColumnHandler.dateFormatter);
+          } else {
+            startDate = nowAtDBTz();
+          }
+          startDate = adjustStartTimeAndStartLogMnr(startDate);
+          offset = new Offset(version, startDate, ZERO, 0);
+        } else {
+          BigDecimal startCommitSCN = new BigDecimal(configBean.startSCN);
+          startLogMnrSCNToDate.setBigDecimal(1, startCommitSCN);
+          final LocalDateTime start = getDateForSCN(startCommitSCN);
+          LocalDateTime endTime = getEndTimeForStartTime(start);
+          startLogMnrSCNToDate.setString(2, endTime.format(dateTimeColumnHandler.dateFormatter));
+          startLogMnrSCNToDate.execute();
+          offset = new Offset(version, start, startCommitSCN.toPlainString(), 0);
+        }
       }
+    } catch (SQLException ex) {
+      LOG.error("SQLException while trying to setup record generator thread", ex);
+      generationStarted = false;
+      return;
     }
     final Offset os = offset;
     final PreparedStatement select = selectFromLogMnrContents;
@@ -396,11 +390,11 @@ public class OracleCDCSource extends BaseSource {
   }
 
   @NotNull
-  private LocalDateTime adjustStartTimeAndStartLogMnr(LocalDateTime startDate) throws SQLException {
+  private LocalDateTime adjustStartTimeAndStartLogMnr(LocalDateTime startDate) throws SQLException, StageException {
     startDate = adjustStartTime(startDate);
     LocalDateTime endTime = getEndTimeForStartTime(startDate);
-    startLogMinerUsingGivenDates(startDate.format(DT_FORMATTER),
-        endTime.format(DT_FORMATTER));
+    startLogMinerUsingGivenDates(startDate.format(dateTimeColumnHandler.dateFormatter),
+        endTime.format(dateTimeColumnHandler.dateFormatter));
     LOG.debug(START_TIME_END_TIME, startDate, endTime);
     return startDate;
   }
@@ -433,7 +427,7 @@ public class OracleCDCSource extends BaseSource {
     // When this is called the first time, Logminer was started either from SCN or from a start date, so we just keep
     // track of the start date etc.
     LOG.info("Attempting to generate records");
-    boolean error = false;
+    boolean error;
     StringBuilder query = new StringBuilder();
     BigDecimal lastCommitSCN = new BigDecimal(startingOffset.scn);
     int sequenceNumber = startingOffset.sequence;
@@ -441,6 +435,8 @@ public class OracleCDCSource extends BaseSource {
     LocalDateTime endTime = getEndTimeForStartTime(startTime);
     ResultSet resultSet = null;
     while (!getContext().isStopped()) {
+      error = false;
+      generationStarted = true;
       try {
         selectChanges = getSelectChangesStatement();
         if (!useLocalBuffering) {
@@ -492,19 +488,9 @@ public class OracleCDCSource extends BaseSource {
             }
             Offset offset = null;
             if (LOG.isDebugEnabled()) {
-              LOG.debug("Commit SCN = {}, SCN = {}, Operation = {}, Redo SQL = {}", commitSCN, scn, op, queryString);
-            }
-
-            RuleContextAndOpCode ctxOp = null;
-            try {
-              ctxOp = getRuleContextAndCode(queryString, op);
-            } catch (UnparseableSQLException ex) {
-              try {
-                errorRecordHandler.onError(JDBC_43, queryString);
-              } catch (StageException stageException) {
-                stageExceptions.add(stageException);
-              }
-              continue;
+              LOG.debug("Commit SCN = {}, SCN = {}, Operation = {}, Txn Id = {}, Timestamp = {}, Redo SQL = {}",
+                  commitSCN, scn, op, xid, tsDate, queryString
+              );
             }
 
             if (op != DDL_CODE && op != COMMIT_CODE && op != ROLLBACK_CODE) {
@@ -531,9 +517,17 @@ public class OracleCDCSource extends BaseSource {
                 if (configBean.keepOriginalQuery) {
                   attributes.put(QUERY_KEY, queryString);
                 }
-                Record record = generateRecord(attributes, ctxOp.operationCode, ctxOp.context);
-                if (record != null && record.getEscapedFieldPaths().size() > 0) {
-                  recordQueue.put(new RecordOffset(record, offset));
+                try {
+                  Record record = generateRecord(queryString, attributes, op);
+                  if (record != null && record.getEscapedFieldPaths().size() > 0) {
+                    recordQueue.put(new RecordOffset(record, offset));
+                  }
+                } catch (UnparseableSQLException ex) {
+                  try {
+                    errorRecordHandler.onError(JDBC_43, queryString);
+                  } catch (StageException stageException) {
+                    addToStageExceptionsQueue(stageException);
+                  }
                 }
               } else {
                 bufferedRecordsLock.lock();
@@ -546,7 +540,7 @@ public class OracleCDCSource extends BaseSource {
 
                   int nextSeq = records.isEmpty() ? 1 : records.tail().seq + 1;
                   RecordSequence node =
-                      new RecordSequence(attributes, queryString, nextSeq, ctxOp.operationCode, rsId, ssn, tsDate);
+                      new RecordSequence(attributes, queryString, nextSeq, op, rsId, ssn, tsDate);
                   records.add(node);
                 } finally {
                   bufferedRecordsLock.unlock();
@@ -556,7 +550,7 @@ public class OracleCDCSource extends BaseSource {
                 useLocalBuffering &&
                 (op == COMMIT_CODE || op == ROLLBACK_CODE)) {
               // so this commit was previously processed or it is a rollback, so don't care.
-              if (op == ROLLBACK_CODE || scnDecimal.compareTo(lastCommitSCN) <= 0) {
+              if (op == ROLLBACK_CODE || scnDecimal.compareTo(lastCommitSCN) < 0) {
                 bufferedRecordsLock.lock();
                 try {
                   bufferedRecords.remove(key);
@@ -566,10 +560,14 @@ public class OracleCDCSource extends BaseSource {
               } else {
                 bufferedRecordsLock.lock();
                 try {
+                  HashQueue<RecordSequence> records = bufferedRecords.getOrDefault(key, EMPTY_LINKED_HASHSET);
+                  if (lastCommitSCN.equals(scnDecimal)) {
+                    removeProcessedRecords(records, sequenceNumber);
+                  }
+                  int bufferedRecordsToBeRemoved = records.size();
+                  LOG.debug(FOUND_RECORDS_IN_TRANSACTION, bufferedRecordsToBeRemoved, xid);
                   lastCommitSCN = scnDecimal;
-                  int bufferedRecordsToBeRemoved = bufferedRecords.getOrDefault(key, EMPTY_LINKED_HASHSET).size();
-                  LOG.debug(FOUND_RECORDS_IN_TRANSACTION, bufferedRecordsToBeRemoved);
-                  addRecordsToQueue(scn, xid);
+                  sequenceNumber = addRecordsToQueue(tsDate, scn, xid);
                 } finally {
                   bufferedRecordsLock.unlock();
                 }
@@ -601,26 +599,28 @@ public class OracleCDCSource extends BaseSource {
         // force a restart from the same timestamp.
         if (ex.getErrorCode() == MISSING_LOG_FILE) {
           LOG.warn("SQL Exception while retrieving records", ex);
-          stageExceptions.add(new StageException(JDBC_86, ex));
+          addToStageExceptionsQueue(new StageException(JDBC_86, ex));
         } else if (ex.getErrorCode() != RESULTSET_CLOSED_AS_LOGMINER_SESSION_CLOSED) {
           LOG.warn("SQL Exception while retrieving records", ex);
         } else if (ex.getErrorCode() == QUERY_TIMEOUT) {
           LOG.warn("LogMiner select query timed out");
+        } else if (ex.getErrorCode() == LOGMINER_START_MUST_BE_CALLED) {
+          LOG.warn("Last LogMiner session did not start successfully. Will retry", ex);
         } else {
           LOG.error("Error while reading data", ex);
-          stageExceptions.add(new StageException(JDBC_52, ex));
+          addToStageExceptionsQueue(new StageException(JDBC_52, ex));
         }
       } catch (StageException e) {
         LOG.error("Error while reading data", e);
         error = true;
-        stageExceptions.add(e);
+        addToStageExceptionsQueue(e);
       } catch (InterruptedException ex) {
         LOG.error("Interrupted while waiting to add data");
         Thread.currentThread().interrupt();
       } catch (Exception ex) {
         LOG.error("Error while reading data", ex);
         error = true;
-        stageExceptions.add(new StageException(JDBC_52, ex));
+        addToStageExceptionsQueue(new StageException(JDBC_52, ex));
       } finally {
         // If an incomplete batch is seen, it means we are going to move the window forward
         // Ending this session and starting a new one helps reduce PGA memory usage.
@@ -631,22 +631,49 @@ public class OracleCDCSource extends BaseSource {
           if (selectChanges != null && !selectChanges.isClosed()) {
             selectChanges.close();
           }
+        } catch (SQLException ex) {
+          LOG.warn("Error while attempting to close SQL statements", ex);
+        }
+        try {
           endLogMnr.execute();
-          if (!error) {
+        } catch (SQLException ex) {
+          LOG.warn("Error while trying to close logminer session", ex);
+        }
+        try {
+          if (error) {
+            try {
+              resetDBConnectionsIfRequired();
+            } catch (SQLException sqlEx) {
+              LOG.error("Error while connecting to DB", sqlEx);
+              addToStageExceptionsQueue(new StageException(JDBC_00, sqlEx));
+            } catch (StageException stageException) {
+              addToStageExceptionsQueue(stageException);
+            }
+          } else {
             discardOldUncommitted(startTime);
             startTime = adjustStartTime(endTime);
             endTime = getEndTimeForStartTime(startTime);
           }
-          startLogMinerUsingGivenDates(startTime.format(DT_FORMATTER), endTime.format(DT_FORMATTER));
+          startLogMinerUsingGivenDates(startTime.format(dateTimeColumnHandler.dateFormatter), endTime.format(dateTimeColumnHandler.dateFormatter));
         } catch (SQLException ex) {
           LOG.error("Error while attempting to start LogMiner", ex);
           try {
             errorRecordHandler.onError(JDBC_52, ex);
           } catch (StageException e) {
-            stageExceptions.add(e);
+            addToStageExceptionsQueue(e);
           }
+        } catch (StageException ex) {
+          LOG.error("Error while attempting to start logminer for redo log dictionary", ex);
+          addToStageExceptionsQueue(ex);
         }
       }
+    }
+  }
+
+  private void removeProcessedRecords(HashQueue<RecordSequence> records, int sequenceNumber) {
+    Iterator<RecordSequence> recordSequenceIterator = records.iterator();
+    while (recordSequenceIterator.hasNext() && recordSequenceIterator.next().seq <= sequenceNumber) {
+      recordSequenceIterator.remove();
     }
   }
 
@@ -654,73 +681,88 @@ public class OracleCDCSource extends BaseSource {
     return useLocalBuffering ? startTime : startTime.minusSeconds(configBean.txnWindow);
   }
 
-
-  private Record generateRecord(Map<String, String> attributes, int operationCode, ParserRuleContext ruleContext)
-      throws StageException {
+  private Record generateRecord(
+      String sql,
+      Map<String, String> attributes,
+      int operationCode
+  ) throws UnparseableSQLException, StageException {
     String operation;
     SchemaAndTable table = new SchemaAndTable(attributes.get(SCHEMA), attributes.get(TABLE));
-    operation = OperationType.getLabelFromIntCode(operationCode);
-    attributes.put(OperationType.SDC_OPERATION_TYPE, String.valueOf(operationCode));
+    int sdcOperationType = ParseUtil.getOperation(operationCode);
+    operation = OperationType.getLabelFromIntCode(sdcOperationType);
+    attributes.put(OperationType.SDC_OPERATION_TYPE, String.valueOf(sdcOperationType));
     attributes.put(OPERATION, operation);
-    // Walk it and attach our sqlListener
-    sqlListener.reset();
-    if (configBean.allowNulls && !table.isNotEmpty()) {
-      sqlListener.setColumns(tableSchemas.get(table).keySet());
-    }
-
-    parseTreeWalker.walk(sqlListener, ruleContext);
-
-    Map<String, String> columns = sqlListener.getColumns();
-    String rowId = columns.get(ROWID);
-    columns.remove(ROWID);
-    if (rowId != null) {
-      attributes.put(ROWID_KEY, rowId);
-    }
-    Map<String, Field> fields = new HashMap<>();
     String id = useLocalBuffering ?
         attributes.get(RS_ID) + OFFSET_DELIM + attributes.get(SSN) :
         attributes.get(SCN) + OFFSET_DELIM + attributes.get(SEQ);
     Record record = getContext().createRecord(id);
-    List<UnsupportedFieldTypeException> fieldTypeExceptions = new ArrayList<>();
-    for (Map.Entry<String, String> column : columns.entrySet()) {
-      String columnName = column.getKey();
-      try {
-        fields.put(columnName, objectToField(table, columnName, column.getValue()));
-      } catch (UnsupportedFieldTypeException ex) {
-        if (configBean.sendUnsupportedFields) {
-          fields.put(columnName, Field.create(column.getValue()));
-        }
-        fieldTypeExceptions.add(ex);
+    if (configBean.parseQuery) {
+      // Walk it and attach our sqlListener
+      sqlListener.reset();
+      if (configBean.allowNulls && table.isNotEmpty()) {
+        sqlListener.setColumns(tableSchemas.get(table).keySet());
       }
-      if (decimalColumns.containsKey(table) && decimalColumns.get(table).containsKey(columnName)) {
-        int precision = decimalColumns.get(table).get(columnName).precision;
-        int scale = decimalColumns.get(table).get(columnName).scale;
-        attributes.put("jdbc." + columnName + ".precision", String.valueOf(precision));
-        attributes.put("jdbc." + columnName + ".scale", String.valueOf(scale));
+
+      parseTreeWalker.walk(sqlListener, ParseUtil.getParserRuleContext(sql, operationCode));
+
+      Map<String, String> columns = sqlListener.getColumns();
+      String rowId = columns.get(ROWID);
+      columns.remove(ROWID);
+      if (rowId != null) {
+        attributes.put(ROWID_KEY, rowId);
       }
-    }
-    attributes.forEach((k, v) -> record.getHeader().setAttribute(k, v));
-    record.set(Field.create(fields));
-    LOG.debug(GENERATED_RECORD, record);
-    Joiner errorStringJoiner = Joiner.on(", ");
-    List<String> errorColumns = Collections.emptyList();
-    if (!fieldTypeExceptions.isEmpty()) {
-      errorColumns = fieldTypeExceptions.stream().map(ex -> {
-            String fieldTypeName = JDBCTypeNames.getOrDefault(ex.fieldType, "unknown");
-            return "[Column = '" + ex.column + "', Type = '" + fieldTypeName + "', Value = '" + ex.columnVal + "']";
+      Map<String, Field> fields = new HashMap<>();
+
+      List<UnsupportedFieldTypeException> fieldTypeExceptions = new ArrayList<>();
+      for (Map.Entry<String, String> column : columns.entrySet()) {
+        String columnName = column.getKey();
+        try {
+          fields.put(columnName, objectToField(table, columnName, column.getValue()));
+        } catch (UnsupportedFieldTypeException ex) {
+          if (configBean.sendUnsupportedFields) {
+            fields.put(columnName, Field.create(column.getValue()));
           }
-      ).collect(Collectors.toList());
-    }
-    if (!fieldTypeExceptions.isEmpty()) {
-      boolean add = handleUnsupportedFieldTypes(record, errorStringJoiner.join(errorColumns));
-      if (add) {
-        return record;
+          fieldTypeExceptions.add(ex);
+        }
+        if (decimalColumns.containsKey(table) && decimalColumns.get(table).containsKey(columnName)) {
+          int precision = decimalColumns.get(table).get(columnName).precision;
+          int scale = decimalColumns.get(table).get(columnName).scale;
+          attributes.put("jdbc." + columnName + ".precision", String.valueOf(precision));
+          attributes.put("jdbc." + columnName + ".scale", String.valueOf(scale));
+        }
+      }
+      record.set(Field.create(fields));
+      attributes.forEach((k, v) -> record.getHeader().setAttribute(k, v));
+
+      LOG.debug(GENERATED_RECORD, record, attributes.get(XID));
+      Joiner errorStringJoiner = Joiner.on(", ");
+      List<String> errorColumns = Collections.emptyList();
+      if (!fieldTypeExceptions.isEmpty()) {
+        errorColumns = fieldTypeExceptions.stream().map(ex -> {
+              String fieldTypeName =
+                  JDBCTypeNames.getOrDefault(ex.fieldType, "unknown");
+              return "[Column = '" + ex.column + "', Type = '" + fieldTypeName + "', Value = '" + ex.columnVal + "']";
+            }
+        ).collect(Collectors.toList());
+      }
+      if (!fieldTypeExceptions.isEmpty()) {
+        boolean add = handleUnsupportedFieldTypes(record, errorStringJoiner.join(errorColumns));
+        if (add) {
+          return record;
+        } else {
+          return null;
+        }
       } else {
-        return null;
+        return record;
       }
     } else {
+      attributes.forEach((k, v) -> record.getHeader().setAttribute(k, v));
+      Map<String, Field> fields = new HashMap<>();
+      fields.put("sql", Field.create(sql));
+      record.set(Field.create(fields));
       return record;
     }
+
   }
 
   private boolean handleUnsupportedFieldTypes(Record r, String error) {
@@ -744,32 +786,46 @@ public class OracleCDCSource extends BaseSource {
     return date.atZone(zoneId).toEpochSecond();
   }
 
-  private void addRecordsToQueue(
+  private int addRecordsToQueue(
+      LocalDateTime commitTimestamp,
       String commitScn,
       String xid
-  ) throws StageException, ParseException, InterruptedException {
+  ) throws StageException, InterruptedException {
     TransactionIdKey key = new TransactionIdKey(xid);
+    int seq = 0;
     bufferedRecordsLock.lock();
     try {
       HashQueue<RecordSequence> records = bufferedRecords.getOrDefault(key, EMPTY_LINKED_HASHSET);
       records.completeInserts();
       while (!records.isEmpty()) {
+        if (getContext().isStopped()) {
+          return seq;
+        }
         RecordSequence r = records.remove();
         try {
           if (configBean.keepOriginalQuery) {
             r.headers.put(QUERY_KEY, r.sqlString);
           }
-          RuleContextAndOpCode ctxOp = getRuleContextAndCode(r.sqlString, r.opCode);
-          Record record = generateRecord(r.headers, ctxOp.operationCode, ctxOp.context);
+          seq = r.seq;
+          Record record = generateRecord(r.sqlString, r.headers, r.opCode);
           if (record != null && record.getEscapedFieldPaths().size() > 0) {
-            recordQueue.put(
-                new RecordOffset(record, new Offset(VERSION_UNCOMMITTED, r.timestamp, commitScn, r.seq)));
+            final RecordOffset recordOffset =
+                new RecordOffset(record, new Offset(VERSION_UNCOMMITTED, commitTimestamp, commitScn, r.seq)
+            );
+            // If produce is not called because pipeline was stopped and the queue is full,
+            // we simply return
+            while (!recordQueue.offer(recordOffset, 1, TimeUnit.SECONDS)) {
+              // if pipeline was stopped just return last added offset.
+              if (getContext().isStopped()) {
+                return seq;
+              }
+            }
           }
         } catch (UnparseableSQLException ex) {
           try {
             errorRecordHandler.onError(JDBC_43, r.sqlString);
           } catch (StageException stageException) {
-            stageExceptions.add(stageException);
+            addToStageExceptionsQueue(stageException);
           }
         }
       }
@@ -778,6 +834,7 @@ public class OracleCDCSource extends BaseSource {
     } finally {
       bufferedRecordsLock.unlock();
     }
+    return seq;
   }
 
   private EventRecord createEventRecord(
@@ -850,6 +907,15 @@ public class OracleCDCSource extends BaseSource {
     }
   }
 
+  private void addToStageExceptionsQueue(StageException ex) {
+    try {
+      while(!stageExceptions.offer(ex, 1, TimeUnit.SECONDS) && !getContext().isStopped());
+    } catch (InterruptedException iEx) {
+      LOG.error("Interrupted while adding stage exception to queue");
+      Thread.currentThread().interrupt();
+    }
+  }
+
   private LocalDateTime getDateForSCN(BigDecimal commitSCN) throws SQLException {
     startLogMinerUsingGivenSCNs(commitSCN, getEndingSCN());
     getTimestampsFromLogMnrContents.setMaxRows(1);
@@ -889,14 +955,23 @@ public class OracleCDCSource extends BaseSource {
     }
   }
 
-  private void startLogMinerUsingGivenDates(String startDate, String endDate) throws SQLException {
+  private void startLogMinerUsingGivenDates(String startDate, String endDate) throws SQLException, StageException {
     try {
+      startLogMnrForRedoDict();
       LOG.info(TRYING_TO_START_LOG_MINER_WITH_START_DATE_AND_END_DATE, startDate, endDate);
       startLogMnrForData.setString(1, startDate);
       startLogMnrForData.setString(2, endDate);
       startLogMnrForData.execute();
     } catch (SQLException ex) {
       LOG.debug("SQLException while starting LogMiner", ex);
+      try {
+        resetDBConnectionsIfRequired();
+      } catch (SQLException sqlEx) {
+        LOG.error("Error while connecting to DB", sqlEx);
+        addToStageExceptionsQueue(new StageException(JDBC_00, sqlEx));
+      } catch (StageException stageException) {
+        addToStageExceptionsQueue(stageException);
+      }
       throw ex;
     }
   }
@@ -924,7 +999,7 @@ public class OracleCDCSource extends BaseSource {
         connection.setAutoCommit(false);
       } catch (StageException | SQLException e) {
         LOG.error("Error while connecting to DB", e);
-        issues.add(getContext().createConfigIssue(Groups.CREDENTIALS.name(), CONNECTION_STR, JDBC_00, e.toString()));
+        issues.add(getContext().createConfigIssue(Groups.JDBC.name(), CONNECTION_STR, JDBC_00, e.toString()));
         return issues;
       }
     }
@@ -932,10 +1007,7 @@ public class OracleCDCSource extends BaseSource {
     recordQueue = new LinkedBlockingQueue<>(2 * configBean.baseConfigBean.maxBatchSize);
 
     String container = configBean.pdb;
-    configBean.baseConfigBean.database =
-        configBean.baseConfigBean.caseSensitive ?
-            configBean.baseConfigBean.database.trim() :
-            configBean.baseConfigBean.database.trim().toUpperCase();
+
     List<SchemaAndTable> schemasAndTables;
 
     try {
@@ -943,8 +1015,14 @@ public class OracleCDCSource extends BaseSource {
       alterSession();
     } catch (SQLException ex) {
       LOG.error("Error while creating statement", ex);
-      issues.add(getContext().createConfigIssue(
-          Groups.CDC.name(), "oracleCDCConfigBean.baseConfigBean.database", JDBC_00, configBean.baseConfigBean.database));
+      issues.add(
+          getContext().createConfigIssue(
+              Groups.JDBC.name(),
+              CONNECTION_STR,
+              JDBC_00,
+              hikariConfigBean.connectionString
+          )
+      );
     }
     zoneId = ZoneId.of(configBean.dbTimeZone);
     dateTimeColumnHandler = new DateTimeColumnHandler(zoneId);
@@ -961,7 +1039,7 @@ public class OracleCDCSource extends BaseSource {
           break;
         case LATEST:
           // If LATEST is used, use now() as the startDate and proceed as if a startDate was specified
-          configBean.startDate = nowAtDBTz().format(DT_FORMATTER);
+          configBean.startDate = nowAtDBTz().format(dateTimeColumnHandler.dateFormatter);
           // fall-through
         case DATE:
           try {
@@ -1002,22 +1080,25 @@ public class OracleCDCSource extends BaseSource {
         }
       }
 
-      Pattern p =
-          StringUtils.isEmpty(configBean.baseConfigBean.excludePattern)?
-              null : Pattern.compile(configBean.baseConfigBean.excludePattern);
       schemasAndTables = new ArrayList<>();
-      for (String table : configBean.baseConfigBean.tables) {
-        try (ResultSet rs = JdbcUtil.getTableMetadata(connection, null, configBean.baseConfigBean.database, table, false)) {
+      for (SchemaTableConfigBean tables : configBean.baseConfigBean.schemaTableConfigs) {
+
+        tables.schema = configBean.baseConfigBean.caseSensitive ? tables.schema : tables.schema.toUpperCase();
+        tables.table = configBean.baseConfigBean.caseSensitive ? tables.table : tables.table.toUpperCase();
+        if (tables.excludePattern != null) {
+          tables.excludePattern =
+              configBean.baseConfigBean.caseSensitive ? tables.excludePattern : tables.excludePattern.toUpperCase();
+        }
+        Pattern p = StringUtils.isEmpty(tables.excludePattern) ? null : Pattern.compile(tables.excludePattern);
+
+        try (ResultSet rs =
+                 JdbcUtil.getTableMetadata(connection, null, tables.schema, tables.table, true)) {
           while (rs.next()) {
             String schemaName = rs.getString(TABLE_METADATA_TABLE_SCHEMA_CONSTANT);
             String tableName = rs.getString(TABLE_METADATA_TABLE_NAME_CONSTANT);
-            if (p == null || (!p.matcher(tableName).matches() && !p.matcher(schemaName).matches())) {
-              if (StringUtils.isNotBlank(schemaName)) {
-                schemaName = schemaName.trim();
-              }
-              if (StringUtils.isNotBlank(tableName)) {
-                tableName = tableName.trim();
-              }
+            if (p == null || !p.matcher(tableName).matches()) {
+              schemaName = schemaName.trim();
+              tableName = tableName.trim();
               schemasAndTables.add(new SchemaAndTable(schemaName, tableName));
             }
           }
@@ -1058,9 +1139,14 @@ public class OracleCDCSource extends BaseSource {
       commitScnField = majorVersion >= 11 ? "COMMIT_SCN" : "CSCN";
     } catch (SQLException ex) {
       LOG.error("Error while creating statement", ex);
-      issues.add(getContext().createConfigIssue(
-          Groups.CDC.name(), "oracleCDCConfigBean.baseConfigBean.database",
-          JDBC_00, configBean.baseConfigBean.database));
+      issues.add(
+          getContext().createConfigIssue(
+              Groups.JDBC.name(),
+              CONNECTION_STR,
+              JDBC_00,
+              hikariConfigBean.connectionString
+          )
+      );
       return issues;
     }
 
@@ -1109,8 +1195,14 @@ public class OracleCDCSource extends BaseSource {
       initializeLogMnrStatements();
     } catch (SQLException ex) {
       LOG.error("Error while creating statement", ex);
-      issues.add(getContext().createConfigIssue(
-          Groups.CDC.name(), "oracleCDCConfigBean.baseConfigBean.database", JDBC_00, configBean.baseConfigBean.database));
+      issues.add(
+          getContext().createConfigIssue(
+              Groups.JDBC.name(),
+              CONNECTION_STR,
+              JDBC_00,
+              hikariConfigBean.connectionString
+          )
+      );
     }
 
     if (configBean.dictionary == DictionaryValues.DICT_FROM_REDO_LOGS) {
@@ -1190,16 +1282,30 @@ public class OracleCDCSource extends BaseSource {
     if (configBean.dictionary != DictionaryValues.DICT_FROM_REDO_LOGS) {
       return;
     }
+    resetDBConnectionsIfRequired();
     BigDecimal endSCN = getEndingSCN();
 
     SQLException lastException = null;
     boolean startedLogMiner = false;
 
+    if (cachedSCNForRedoLogs.get().compareTo(BigDecimal.ZERO) > 0) { // There is a cached SCN, let's try that one.
+      try {
+        startLogMinerUsingGivenSCNs(cachedSCNForRedoLogs.get(), endSCN);
+        // Still valid, so return
+        return;
+      } catch (SQLException e) {
+        LOG.debug("Cached SCN {} is no longer valid, retrieving new SCN", cachedSCNForRedoLogs);
+      }
+    }
+
+    // Cached SCN is no longer valid, try to get the next oldest ones and start.
+    getOldestSCN.setBigDecimal(1, cachedSCNForRedoLogs.get());
     try (ResultSet rs = getOldestSCN.executeQuery()) {
       while (rs.next()) {
         BigDecimal oldestSCN = rs.getBigDecimal(1);
         try {
           startLogMinerUsingGivenSCNs(oldestSCN, endSCN);
+          cachedSCNForRedoLogs.set(oldestSCN);
           startedLogMiner = true;
           break;
         } catch (SQLException ex) {
@@ -1431,87 +1537,16 @@ public class OracleCDCSource extends BaseSource {
     }
     int columnType = tableSchema.get(column);
 
-    Field field;
-    // All types as of JDBC 2.0 are here:
-    // https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Types.ARRAY
-    // Good source of recommended mappings is here:
-    // http://www.cs.mun.ca/java-api-1.5/guide/jdbc/getstart/mapping.html
-    columnValue = NULL.equalsIgnoreCase(columnValue) ? null : columnValue; //NOSONAR
-    switch (columnType) {
-      case Types.BIGINT:
-        field = Field.create(Field.Type.LONG, columnValue);
-        break;
-      case Types.BINARY:
-      case Types.LONGVARBINARY:
-      case Types.VARBINARY:
-        field = Field.create(Field.Type.BYTE_ARRAY, RawTypeHandler.parseRaw(column, columnValue, columnType));
-        break;
-      case Types.BIT:
-      case Types.BOOLEAN:
-        field = Field.create(Field.Type.BOOLEAN, columnValue);
-        break;
-      case Types.CHAR:
-      case Types.LONGNVARCHAR:
-      case Types.LONGVARCHAR:
-      case Types.NCHAR:
-      case Types.NVARCHAR:
-      case Types.VARCHAR:
-        field = Field.create(Field.Type.STRING, columnValue);
-        break;
-      case Types.DECIMAL:
-      case Types.NUMERIC:
-        field = Field.create(Field.Type.DECIMAL, columnValue);
-        break;
-      case Types.DOUBLE:
-        field = Field.create(Field.Type.DOUBLE, columnValue);
-        break;
-      case Types.FLOAT:
-      case Types.REAL:
-        field = Field.create(Field.Type.FLOAT, columnValue);
-        break;
-      case Types.INTEGER:
-        field = Field.create(Field.Type.INTEGER, columnValue);
-        break;
-      case Types.SMALLINT:
-      case Types.TINYINT:
-        field = Field.create(Field.Type.SHORT, columnValue);
-        break;
-      case Types.DATE:
-      case Types.TIME:
-      case Types.TIMESTAMP:
-        // For whatever reason, Oracle returns all the date/time/timestamp fields as the same type, so additional
-        // logic is required to accurately parse the type
-        String actualType = dateTimeColumns.get(schemaAndTable).get(column);
-        field = dateTimeColumnHandler.getDateTimeStampField(column, columnValue, columnType, actualType);
-        break;
-      case Types.TIMESTAMP_WITH_TIMEZONE:
-      case TIMESTAMP_TZ_TYPE:
-        field = dateTimeColumnHandler.getTimestampWithTimezoneField(columnValue);
-        break;
-      case TIMESTAMP_LTZ_TYPE:
-        field = dateTimeColumnHandler.getTimestampWithLocalTimezone(columnValue);
-        break;
-      case Types.ROWID:
-      case Types.CLOB:
-      case Types.NCLOB:
-      case Types.BLOB:
-      case Types.ARRAY:
-      case Types.DATALINK:
-      case Types.DISTINCT:
-      case Types.JAVA_OBJECT:
-      case Types.NULL:
-      case Types.OTHER:
-      case Types.REF:
-      case Types.REF_CURSOR:
-      case Types.SQLXML:
-      case Types.STRUCT:
-      case Types.TIME_WITH_TIMEZONE:
-      default:
-        throw new UnsupportedFieldTypeException(column, columnValue, columnType);
-    }
-
-    return field;
+    return ParseUtil.generateField(
+        schemaAndTable,
+        column,
+        columnValue,
+        columnType,
+        dateTimeColumnHandler,
+        dateTimeColumns
+    );
   }
+
 
   private void alterSession() throws SQLException {
     if (containerized) {
@@ -1540,10 +1575,15 @@ public class OracleCDCSource extends BaseSource {
           if (!configBean.discardExpired) {
             for (RecordSequence x : entry.getValue()) {
               try {
-                RuleContextAndOpCode ctxOp = getRuleContextAndCode(x.sqlString, x.opCode);
-                Record record = generateRecord(x.headers, ctxOp.operationCode, ctxOp.context);
+                Record record = generateRecord(x.sqlString, x.headers, x.opCode);
                 if (record != null) {
                   getContext().toError(record, JDBC_84, entry.getKey().txnId, entry.getKey().txnStartTime);
+                }
+              } catch(UnparseableSQLException ex) {
+                try {
+                  errorRecordHandler.onError(JDBC_43, x.sqlString);
+                } catch (StageException stageException) {
+                  addToStageExceptionsQueue(stageException);
                 }
               } catch (Exception ex) {
                 LOG.error("Error while generating expired record from SQL: " + x.sqlString);
@@ -1585,35 +1625,6 @@ public class OracleCDCSource extends BaseSource {
     this.dataSource = dataSource;
   }
 
-  private RuleContextAndOpCode getRuleContextAndCode(String queryString, int op) throws UnparseableSQLException {
-    plsqlLexer lexer = new plsqlLexer(new ANTLRInputStream(queryString));
-    CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-    plsqlParser parser = new plsqlParser(tokenStream);
-    RuleContextAndOpCode contextAndOpCode = new RuleContextAndOpCode();
-    switch (op) {
-      case UPDATE_CODE:
-      case SELECT_FOR_UPDATE_CODE:
-        contextAndOpCode.context = parser.update_statement();;
-        contextAndOpCode.operationCode = OperationType.UPDATE_CODE;
-        break;
-      case INSERT_CODE:
-        contextAndOpCode.context = parser.insert_statement();
-        contextAndOpCode.operationCode = OperationType.INSERT_CODE;
-        break;
-      case DELETE_CODE:
-        contextAndOpCode.context = parser.delete_statement();
-        contextAndOpCode.operationCode = OperationType.DELETE_CODE;
-        break;
-      case DDL_CODE:
-      case COMMIT_CODE:
-      case ROLLBACK_CODE:
-        break;
-      default:
-        throw new UnparseableSQLException(queryString);
-    }
-    return contextAndOpCode;
-  }
-
   private HashQueue<RecordSequence> createTransactionBuffer(String txnId) {
     try {
       return configBean.bufferLocation == BufferingValues.IN_MEMORY ? new InMemoryHashQueue<>() :
@@ -1621,16 +1632,6 @@ public class OracleCDCSource extends BaseSource {
     } catch (IOException ex) {
       LOG.error("Error while creating transaction buffer", ex);
       throw new RuntimeException(ex);
-    }
-  }
-
-  private class PrecisionAndScale {
-    int precision;
-    int scale;
-
-    PrecisionAndScale(int precision, int scale) {
-      this.precision = precision;
-      this.scale = scale;
     }
   }
 
@@ -1693,11 +1694,6 @@ public class OracleCDCSource extends BaseSource {
     }
   }
 
-  private class RuleContextAndOpCode {
-    ParserRuleContext context;
-    int operationCode;
-  }
-
   private class RecordOffset {
     final Record record;
     final Offset offset;
@@ -1705,14 +1701,6 @@ public class OracleCDCSource extends BaseSource {
     public RecordOffset(Record record, Offset offset) {
       this.record = record;
       this.offset = offset;
-    }
-  }
-
-  private class UnparseableSQLException extends Exception {
-    final String sql;
-
-    UnparseableSQLException(String sql) {
-      this.sql = sql;
     }
   }
 

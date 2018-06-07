@@ -57,7 +57,15 @@ import java.util.Map;
 @ConfigGroups(PipelineGroups.class)
 public class PipelineConfigBean implements Stage {
 
-  public static final int VERSION = 7;
+  public static final int VERSION = 9;
+
+  public static final String STATS_AGGREGATOR_DEFAULT = "streamsets-datacollector-basic-lib" +
+      "::com_streamsets_pipeline_stage_destination_devnull_StatsNullDTarget::1";
+
+  public static final String STATS_DPM_DIRECTLY_TARGET = "streamsets-datacollector-basic-lib" +
+      "::com_streamsets_pipeline_stage_destination_devnull_StatsDpmDirectlyDTarget::1";
+
+  public static final String EDGE_HTTP_URL_DEFAULT = "http://localhost:18633";
 
   @ConfigDef(
       required = true,
@@ -68,6 +76,17 @@ public class PipelineConfigBean implements Stage {
   )
   @ValueChooserModel(ExecutionModeChooserValues.class)
   public ExecutionMode executionMode;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.STRING,
+      label = "Data Collector Edge URL",
+      defaultValue = EDGE_HTTP_URL_DEFAULT,
+      displayPosition = 15,
+      dependsOn = "executionMode",
+      triggeredByValue = {"EDGE"}
+  )
+  public String edgeHttpUrl = EDGE_HTTP_URL_DEFAULT;
 
   @ConfigDef(
       required = true,
@@ -208,7 +227,7 @@ public class PipelineConfigBean implements Stage {
     required = false,
     type = ConfigDef.Type.MODEL,
     label = "Statistics Aggregator",
-    defaultValue = "streamsets-datacollector-basic-lib::com_streamsets_pipeline_stage_destination_devnull_StatsNullDTarget::1",
+    defaultValue = STATS_AGGREGATOR_DEFAULT,
     displayPosition = 95,
     group = "STATS"
   )
@@ -326,6 +345,20 @@ public class PipelineConfigBean implements Stage {
     displayPosition = 200
   )
   public boolean shouldCreateFailureSnapshot;
+
+  @ConfigDef(
+    required = true,
+    type = ConfigDef.Type.NUMBER,
+    defaultValue = "60",
+    label = "Runner Idle Time (sec)",
+    description = "When pipeline runners are idle for at least this time, run an empty batch through the runner to" +
+      " process any events or other time-driven functionality. Value -1 will disable this functionality completely.",
+    dependencies = @Dependency(
+      configName = "executionMode", triggeredByValues = "STANDALONE"
+    ),
+    displayPosition = 210
+  )
+  public long runnerIdleTIme = 60;
 
   @ConfigDef(required = true,
       type = ConfigDef.Type.MODEL,

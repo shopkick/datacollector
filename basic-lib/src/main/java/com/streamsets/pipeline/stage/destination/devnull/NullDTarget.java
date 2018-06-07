@@ -20,7 +20,7 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.Target;
-import com.streamsets.pipeline.configurablestage.DTarget;
+import com.streamsets.pipeline.api.base.configurablestage.DTarget;
 
 @StageDef(
     version = 1,
@@ -34,7 +34,7 @@ import com.streamsets.pipeline.configurablestage.DTarget;
         ExecutionMode.CLUSTER_MESOS_STREAMING,
         ExecutionMode.EDGE
     },
-    onlineHelpRefUrl = "index.html#Destinations/Trash.html#task_ad4_qyl_zq"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Destinations/Trash.html#task_ad4_qyl_zq"
 )
 @HideConfigs(preconditions = true, onErrorRecord = true)
 @GenerateResourceBundle

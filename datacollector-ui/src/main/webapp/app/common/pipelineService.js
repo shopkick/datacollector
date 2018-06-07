@@ -19,24 +19,32 @@
 angular.module('dataCollectorApp.common')
   .service('pipelineService', function(pipelineConstant, api, $q, $translate, $modal, $location, $route, _) {
 
-    var self = this,
-      translations = {},
-      defaultELEditorOptions = {
-        mode: {
-          name: 'javascript'
-        },
-        inputStyle: 'contenteditable',
-        showCursorWhenSelecting: true,
-        lineNumbers: false,
-        matchBrackets: true,
-        autoCloseBrackets: {
-          pairs: '(){}\'\'""'
-        },
-        cursorHeight: 1,
-        extraKeys: {
-          'Ctrl-Space': 'autocomplete'
-        }
-      };
+    var self = this;
+    var translations = {};
+    var defaultELEditorOptions = {
+      mode: {
+        name: 'javascript'
+      },
+      inputStyle: 'contenteditable',
+      showCursorWhenSelecting: true,
+      lineNumbers: false,
+      matchBrackets: true,
+      autoCloseBrackets: {
+        pairs: '(){}\'\'""'
+      },
+      cursorHeight: 1,
+      extraKeys: {
+        'Ctrl-Space': 'autocomplete'
+      }
+    };
+    var fragmentGroupStages = [
+      'com_streamsets_pipeline_stage_origin_fragment_FragmentSource',
+      'com_streamsets_pipeline_stage_processor_fragment_FragmentProcessor',
+      'com_streamsets_pipeline_stage_destination_fragment_FragmentTarget'
+    ];
+
+    var confFragmentId = 'conf.fragmentId';
+    var confFragmentInstanceId = 'conf.fragmentInstanceId';
 
     this.initializeDefer = undefined;
 
@@ -141,7 +149,7 @@ angular.module('dataCollectorApp.common')
     };
 
     /**
-     * Returns true if SCH Statistics library installed otherwise false
+     * Returns true if Control Hub Statistics library installed otherwise false
      */
     this.isDPMStatisticsLibraryInstalled = function() {
       var statsLibraryDefn = _.find(self.stageDefinitions, function (stage) {
@@ -701,6 +709,15 @@ angular.module('dataCollectorApp.common')
           serviceInstance.configuration.push(self.setDefaultValueForConfig(configDefinition, null));
         });
 
+        // Propagate RUNTIME configuration injected by the stage
+        angular.forEach(serviceDependency.configuration, function(value, key) {
+          angular.forEach(serviceInstance.configuration, function(config) {
+            if(config.name == key) {
+              config.value = value;
+            }
+          });
+        });
+
         // And finally push it to the stage definition
         stageInstance.services.push(serviceInstance);
       });
@@ -745,7 +762,7 @@ angular.module('dataCollectorApp.common')
      * @returns {*}
      */
     this.getStageInstanceName = function(stage, pipelineConfig, options) {
-      var stageName = stage.label.replace(/ /g, '');
+      var stageName = stage.label.replace(/ /g, '').replace(/\//g, '');
 
       if (options.errorStage) {
         return stageName + '_ErrorStage';
@@ -1156,12 +1173,12 @@ angular.module('dataCollectorApp.common')
     /**
      * Auto Arrange the stages in the pipeline config
      *
-     * @param pipelineConfig
+     * @param stages
      */
-    this.autoArrange = function(pipelineConfig) {
+    this.autoArrange = function(stages) {
+      stages = this.sortStageInstances(stages);
       var xPos = 60;
       var yPos = 50;
-      var stages = pipelineConfig.stages;
       var laneYPos = {};
       var laneXPos = {};
 
@@ -1221,6 +1238,43 @@ angular.module('dataCollectorApp.common')
 
         xPos = x + 220;
       });
+    };
+
+    this.sortStageInstances = function(stages) {
+      if (!stages || stages.length === 0) {
+        return stages;
+      }
+      var sorted = [];
+      var removedMap = {};
+      var producedOutputs = [];
+      var ok = true;
+      var iteration = 0;
+      while (ok) {
+        var prior = sorted.length;
+        angular.forEach(stages, function(t) {
+          if (!removedMap[t.instanceName]) {
+            var alreadyProduced = _.filter(producedOutputs, function(p) {
+              return t.inputLanes.indexOf(p) !== -1;
+            });
+            if (alreadyProduced.length === t.inputLanes.length) {
+              producedOutputs.push.apply(producedOutputs, t.outputLanes);
+              producedOutputs.push.apply(producedOutputs, t.eventLanes);
+              removedMap[t.instanceName] = true;
+              sorted.push(t);
+            }
+          }
+        });
+        iteration++;
+        if (prior === sorted.length && iteration >= sorted.length) {
+          ok = false;
+          angular.forEach(stages, function(t) {
+            if (!removedMap[t.instanceName]) {
+              sorted.push(t);
+            }
+          });
+        }
+      }
+      return sorted;
     };
 
     $translate([
@@ -1854,6 +1908,33 @@ angular.module('dataCollectorApp.common')
           returnType: "Type"
         }
       ];
+    };
+
+    // Fragments helpers
+    this.ProcessFragmentStages = function(pipelineConfig) {
+      var stageInstances = [];
+      angular.forEach(pipelineConfig.stages, function (stageInstance) {
+        if (fragmentGroupStages.indexOf(stageInstance.stageName) === -1) {
+          stageInstances.push(stageInstance);
+        } else {
+          var fragmentIdConfig = _.find(stageInstance.configuration, function (c) {
+            return c.name === confFragmentId;
+          });
+          var fragmentInstanceIdConfig = _.find(stageInstance.configuration, function (c) {
+            return c.name === confFragmentInstanceId;
+          });
+          if (fragmentIdConfig && fragmentInstanceIdConfig) {
+            angular.forEach(pipelineConfig.fragments, function (fragment) {
+              if (fragment.fragmentId === fragmentIdConfig.value &&
+                fragment.fragmentInstanceId === fragmentInstanceIdConfig.value) {
+                stageInstances.push.apply(stageInstances, fragment.stages);
+              }
+            });
+          }
+        }
+      });
+      self.autoArrange(stageInstances);
+      return stageInstances;
     };
 
   });

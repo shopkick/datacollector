@@ -17,11 +17,12 @@ package com.streamsets.pipeline.stage.processor.javascript;
 
 import com.streamsets.pipeline.api.ConfigDef;
 import com.streamsets.pipeline.api.ConfigGroups;
+import com.streamsets.pipeline.api.ExecutionMode;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
-import com.streamsets.pipeline.configurablestage.DProcessor;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.stage.processor.scripting.ProcessingMode;
 import com.streamsets.pipeline.stage.processor.scripting.ProcessingModeChooserValues;
 
@@ -30,9 +31,16 @@ import com.streamsets.pipeline.stage.processor.scripting.ProcessingModeChooserVa
     label = "JavaScript Evaluator",
     description = "Processes records using JavaScript",
     icon = "javascript.png",
+    execution = {
+        ExecutionMode.STANDALONE,
+        ExecutionMode.CLUSTER_BATCH,
+        ExecutionMode.CLUSTER_YARN_STREAMING,
+        ExecutionMode.CLUSTER_MESOS_STREAMING,
+        ExecutionMode.EDGE
+    },
     upgrader = JavaScriptProcessorUpgrader.class,
     producesEvents = true,
-    onlineHelpRefUrl = "index.html#Processors/JavaScript.html#task_mzc_1by_nr"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/JavaScript.html#task_mzc_1by_nr"
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle
@@ -85,6 +93,7 @@ public class JavaScriptDProcessor extends DProcessor {
       " *                            Create new empty event with standard headers.\n" +
       " *  sdcFunctions.toEvent(Record): Send event to event stream\n" +
       " *                            Only events created with sdcFunctions.createEvent are supported.\n" +
+      " *  sdcFunctions.isPreview(): Determine if pipeline is in preview mode.\n" +
       " *\n" +
       " * Available Record Header Variables:n" +
       " *\n" +

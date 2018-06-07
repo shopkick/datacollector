@@ -24,8 +24,8 @@ import com.streamsets.pipeline.api.HideConfigs;
 import com.streamsets.pipeline.api.RawSource;
 import com.streamsets.pipeline.api.Source;
 import com.streamsets.pipeline.api.StageDef;
+import com.streamsets.pipeline.api.base.configurablestage.DClusterSourceOffsetCommitter;
 import com.streamsets.pipeline.api.impl.ClusterSource;
-import com.streamsets.pipeline.configurablestage.DClusterSourceOffsetCommitter;
 import com.streamsets.pipeline.kafka.api.KafkaOriginGroups;
 
 @StageDef(
@@ -37,7 +37,7 @@ import com.streamsets.pipeline.kafka.api.KafkaOriginGroups;
   icon = "kafka.png",
   recordsByRef = true,
   upgrader = KafkaSourceUpgrader.class,
-  onlineHelpRefUrl = "index.html#Origins/KConsumer.html#task_npx_xgf_vq"
+  onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/KConsumer.html#task_npx_xgf_vq"
 )
 @RawSource(rawSourcePreviewer = KafkaRawSourcePreviewer.class, mimeType = "*/*")
 @ConfigGroups(value = KafkaOriginGroups.class)

@@ -15,6 +15,7 @@
  */
 package com.streamsets.pipeline.stage.destination.kudu;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -45,7 +46,6 @@ import com.streamsets.pipeline.stage.common.DefaultErrorRecordHandler;
 import com.streamsets.pipeline.stage.common.ErrorRecordHandler;
 import com.streamsets.pipeline.stage.lib.kudu.Errors;
 import com.streamsets.pipeline.stage.lib.kudu.KuduFieldMappingConfig;
-import org.apache.commons.lang.StringUtils;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.Type;
@@ -59,9 +59,12 @@ import org.apache.kudu.client.OperationResponse;
 import org.apache.kudu.client.PartialRow;
 import org.apache.kudu.client.RowError;
 import org.apache.kudu.client.SessionConfiguration;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -129,7 +132,17 @@ public class KuduTarget extends BaseTarget {
         .expireAfterAccess(1, TimeUnit.HOURS);
 
     if(LOG.isDebugEnabled()) {
-      cacheBuilder.recordStats();
+      // recordStats is available only in Guava 12.0 and above, but
+      // CDH still uses guava 11.0. Hence the reflection.
+      try {
+        Method m = CacheBuilder.class.getMethod("recordStats");
+        if (m != null) {
+          m.invoke(cacheBuilder);
+        }
+      } catch (NoSuchMethodException|IllegalAccessException|InvocationTargetException e) {
+        // We're intentionally ignoring any reflection errors as we might be running
+        // with old guava on class path.
+      }
     }
 
     kuduTables = cacheBuilder.build(new CacheLoader<String, KuduTable>() {
@@ -184,7 +197,7 @@ public class KuduTarget extends BaseTarget {
       );
     }
 
-    kuduClient = new KuduClient.KuduClientBuilder(kuduMaster).defaultOperationTimeoutMs(configBean.operationTimeout).build();
+    kuduClient = buildKuduClient();
     if (issues.isEmpty()) {
       kuduSession = openKuduSession(issues);
     }
@@ -249,6 +262,12 @@ public class KuduTarget extends BaseTarget {
         createKuduRecordConverter(issues, table);
       }
     }
+  }
+
+  @NotNull
+  @VisibleForTesting
+  KuduClient buildKuduClient() {
+    return new KuduClient.KuduClientBuilder(kuduMaster).defaultOperationTimeoutMs(configBean.operationTimeout).build();
   }
 
   private KuduSession openKuduSession(List<ConfigIssue> issues) {
@@ -355,7 +374,7 @@ public class KuduTarget extends BaseTarget {
     for (String tableName : partitions.keySet()) {
 
       // Send one LineageEvent per table that is accessed.
-      if(!StringUtils.isEmpty(tableName)) {
+      if(tableName != null && !tableName.isEmpty()) {
         if (!accessedTables.contains(tableName)) {
           accessedTables.add(tableName);
           sendLineageEvent(tableName);
@@ -428,6 +447,8 @@ public class KuduTarget extends BaseTarget {
               errorRecordHandler.onError(new OnRecordErrorException(record, Errors.KUDU_03, ex.getMessage(), ex));
             }
           }
+        } catch (OnRecordErrorException e) {
+          errorRecordHandler.onError(e);
         } catch (KuduException ex) {
           LOG.error(Errors.KUDU_03.getMessage(), ex.toString(), ex);
           errorRecordHandler.onError(new OnRecordErrorException(record, Errors.KUDU_03, ex.getMessage(), ex));

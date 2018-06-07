@@ -21,7 +21,7 @@ import com.streamsets.pipeline.api.ConfigGroups;
 import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Source;
 import com.streamsets.pipeline.api.StageDef;
-import com.streamsets.pipeline.configurablestage.DSource;
+import com.streamsets.pipeline.api.base.configurablestage.DSource;
 
 @StageDef(
     version = 1,
@@ -31,7 +31,7 @@ import com.streamsets.pipeline.configurablestage.DSource;
     recordsByRef = true,
     resetOffset = true,
     producesEvents = true,
-    onlineHelpRefUrl = "index.html#Origins/GCS.html#task_wzm_2rl_nbb"
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Origins/GCS.html#task_wzm_2rl_nbb"
 )
 @ConfigGroups(value = Groups.class)
 @GenerateResourceBundle

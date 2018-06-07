@@ -45,7 +45,7 @@ import com.streamsets.pipeline.stage.origin.jdbc.table.PartitioningMode;
 import com.streamsets.pipeline.stage.origin.jdbc.table.TableConfigBean;
 import com.streamsets.pipeline.stage.origin.jdbc.table.TableJdbcConfigBean;
 import com.zaxxer.hikari.HikariDataSource;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +63,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -89,7 +90,7 @@ public abstract class AbstractTableJdbcSource extends BasePushSource {
   private HikariDataSource hikariDataSource;
   private ConnectionManager connectionManager;
   private Map<String, String> offsets;
-  private ExecutorService executorService;
+  private ScheduledExecutorService executorService;
   private MultithreadedTableProvider tableOrderProvider;
   private int numberOfThreads;
 
@@ -358,7 +359,20 @@ public abstract class AbstractTableJdbcSource extends BasePushSource {
 
       while (!getContext().isStopped()) {
         checkWorkerStatus(completionService);
-        JdbcUtil.generateNoMoreDataEventIfNeeded(tableOrderProvider.shouldGenerateNoMoreDataEvent(), getContext());
+        final boolean shouldGenerate = tableOrderProvider.shouldGenerateNoMoreDataEvent();
+        if (shouldGenerate) {
+          final int delay = commonSourceConfigBean.noMoreDataEventDelay;
+          if (delay > 0) {
+            Executors.newSingleThreadScheduledExecutor().schedule(new Runnable() {
+              @Override
+              public void run() {
+                JdbcUtil.generateNoMoreDataEvent(getContext());
+              }
+            }, delay, TimeUnit.SECONDS);
+          } else {
+            JdbcUtil.generateNoMoreDataEvent(getContext());
+          }
+        }
       }
 
       for (Future future : allFutures) {

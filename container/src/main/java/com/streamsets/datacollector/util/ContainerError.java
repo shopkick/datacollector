@@ -71,7 +71,7 @@ public enum ContainerError implements ErrorCode {
   CONTAINER_0155("Instance '{}' required fields configuration must be a list instead of a '{}'"),
   CONTAINER_0156("Invalid instance '{}'"),
   CONTAINER_0157("Cannot do a preview stage run on an origin, instance '{}'"),
-  CONTAINER_0158("Cannot run the pipeline: {}"),
+  CONTAINER_0158("Cannot run the pipeline due to validation issues ({} issues)"),
   CONTAINER_0159("Cannot perform raw source preview because pipeline '{}' is empty"),
   CONTAINER_0160("Cannot perform raw source preview until the following required parameters are configured: '{}'"),
   CONTAINER_0161("Stage '{}', instance '{}', variable '{}', configuration injection error: Value List has non-string elements"),
@@ -144,7 +144,9 @@ public enum ContainerError implements ErrorCode {
   //PipelineConfigurationUpgrader
   CONTAINER_0900("Error while upgrading stage configuration from version '{}' to version '{}': {}"),
   CONTAINER_0901("Could not find stage definition for '{}:{}'"),
-  CONTAINER_0902("Stage definition '{}:{}' version '{}' is older than the version specified in the configuration '{}' for stage '{}'"),
+  CONTAINER_0902("Definition requires at least version {} which is higher then available library supports ({})"),
+  CONTAINER_0903("Could not find service definition for '{}'"),
+  CONTAINER_0904("Service Upgrader can't register another service."),
 
   //Email Notifier
   CONTAINER_01000("Error loading email template, reason : {}"),
@@ -173,6 +175,11 @@ public enum ContainerError implements ErrorCode {
 
   CONTAINER_01600("Download executable not supported for pipeline execution mode: '{}'"),
   CONTAINER_01601("Start operation is not supported for pipeline '{}' with execution mode: '{}'"),
+  CONTAINER_01602("Data Collector cannot connect to Data Collector Edge URL '{}'. Verify that Data Collector Edge is " +
+      "running and that the URL is correctly configured in the pipeline general properties."),
+  CONTAINER_01603("Starting Edge pipeline failed, status code '{}': {}"),
+  CONTAINER_01604("Reset Offset for Edge pipeline failed, status code '{}': {}"),
+  CONTAINER_01605("Publishing Edge pipeline failed, status code '{}': {}"),
   ;
 
   private final String msg;

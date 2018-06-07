@@ -314,7 +314,7 @@ angular
        * @param $index
        */
       removeLane: function(stageInstance, configValue, lanePredicateMapping, $index) {
-        var stages = $scope.pipelineConfig.stages;
+        var stages = $scope.stageInstances;
 
         stageInstance.outputLanes.splice($index, 1);
         configValue.splice($index, 1);
@@ -522,6 +522,55 @@ angular
         }
       },
 
+      /**
+       * Generate structure for ng-repeat of a ValueChooserModel.
+       *
+       * Return structure will be filtered based on the runtime value of a filterConfig if one
+       * exists and is specified.
+       *
+       * @param instance Instance of a stage or service.
+       * @param configDefinition Definition of the ValueChooser config
+       * @returns [{label:*, value:*}]
+       */
+      getValueChooserOptions: function(instance, definition) {
+        var list = [];
+        var filter = $scope.getConfig(definition.model.filteringConfig, instance);
+
+        angular.forEach(definition.model.values, function(value, index) {
+
+          if(filter && filter.indexOf(value) < 0) {
+            return;
+          }
+
+          var entry = {
+            label: definition.model.labels[index],
+            value: value
+          };
+          list.push(entry);
+        });
+
+        return list;
+      },
+
+      /**
+       * Return config of given name from the stage or service instance.
+       *
+       * @param name Name of the config.
+       * @param instance Instance of a stage or service.
+       * @returns {*}
+       */
+      getConfig: function(name, instance) {
+        var value = undefined;
+
+        angular.forEach(instance.configuration, function(config) {
+          if(config.name === name) {
+            value = config.value;
+          }
+        });
+
+        return value;
+      },
+
 
       /**
        * Returns true if at least one config is visible in given group.
@@ -620,14 +669,13 @@ angular
       },
 
       producingEventsConfigChange: function() {
-        console.log($scope.producingEventsConfig);
         if ($scope.producingEventsConfig.value && $scope.detailPaneConfigDefn.producingEvents &&
           (!$scope.detailPaneConfig.eventLanes || $scope.detailPaneConfig.eventLanes.length === 0)) {
           $scope.detailPaneConfig.eventLanes = [$scope.detailPaneConfig.instanceName + '_EventLane'];
         } else if (!$scope.producingEventsConfig.value) {
           if ($scope.detailPaneConfig.eventLanes && $scope.detailPaneConfig.eventLanes.length) {
             var eventLane = $scope.detailPaneConfig.eventLanes[0];
-            angular.forEach($scope.pipelineConfig.stages, function (targetStageInstance) {
+            angular.forEach($scope.stageInstances, function (targetStageInstance) {
               if (targetStageInstance.inputLanes && targetStageInstance.inputLanes.length) {
                 targetStageInstance.inputLanes = _.filter(targetStageInstance.inputLanes, function (inputLane) {
                   return inputLane !== eventLane;
@@ -733,7 +781,7 @@ angular
         // stages have services, we need to add their groups only selectively.
         if ('services' in $scope.detailPaneConfigDefn) {
           angular.forEach($scope.detailPaneConfigDefn.services, function(serviceDependency) {
-            let serviceDef = pipelineService.getServiceDefinition(serviceDependency.service);
+            var serviceDef = pipelineService.getServiceDefinition(serviceDependency.service);
             angular.forEach(serviceDef.configGroupDefinition.groupNameToLabelMapList, function(item) {
               $scope.configGroupTabs.push(item);
             });
@@ -796,7 +844,7 @@ angular
         $scope.dFieldPaths = [];
         $scope.fieldPathsType = [];
 
-        if ($scope.detailPaneConfigDefn.producingEvents) {
+        if ($scope.detailPaneConfigDefn && $scope.detailPaneConfigDefn.producingEvents) {
           $scope.producingEventsConfig.value =
             ($scope.detailPaneConfig.eventLanes && $scope.detailPaneConfig.eventLanes.length > 0);
         }

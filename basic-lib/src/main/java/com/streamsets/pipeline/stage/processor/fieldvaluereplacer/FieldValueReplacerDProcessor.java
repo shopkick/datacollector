@@ -23,9 +23,9 @@ import com.streamsets.pipeline.api.GenerateResourceBundle;
 import com.streamsets.pipeline.api.Processor;
 import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.ValueChooserModel;
+import com.streamsets.pipeline.api.base.configurablestage.DProcessor;
 import com.streamsets.pipeline.config.OnStagePreConditionFailure;
 import com.streamsets.pipeline.config.OnStagePreConditionFailureChooserValues;
-import com.streamsets.pipeline.configurablestage.DProcessor;
 
 import java.util.List;
 
@@ -34,11 +34,12 @@ import java.util.List;
     label="Value Replacer",
     description = "Replaces null values with a constant and replaces values with NULL",
     icon="replacer.png",
-    onlineHelpRefUrl = "index.html#Processors/ValueReplacer.html#task_ihq_ymf_zq",
+    onlineHelpRefUrl ="index.html#datacollector/UserGuide/Processors/ValueReplacer.html#task_ihq_ymf_zq",
     upgrader = FieldValueReplacerUpgrader.class
 )
 @ConfigGroups(Groups.class)
 @GenerateResourceBundle
+@Deprecated // Use FieldReplacerProcessor that is based on field path expression rather then set of difficult conditions
 public class FieldValueReplacerDProcessor extends DProcessor {
 
   @ConfigDef(

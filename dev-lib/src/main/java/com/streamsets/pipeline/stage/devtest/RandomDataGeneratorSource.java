@@ -34,7 +34,6 @@ import com.streamsets.pipeline.api.lineage.LineageEventType;
 import com.streamsets.pipeline.api.lineage.LineageSpecificAttribute;
 import com.streamsets.pipeline.lib.util.ThreadUtil;
 import com.streamsets.pipeline.stage.common.HeaderAttributeConstants;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,7 +64,7 @@ import java.util.concurrent.Future;
   icon= "dev.png",
   producesEvents = true,
   upgrader = RandomDataGeneratorSourceUpgrader.class,
-  onlineHelpRefUrl = "index.html#Pipeline_Design/DevStages.html"
+  onlineHelpRefUrl ="index.html#datacollector/UserGuide/Pipeline_Design/DevStages.html"
 )
 public class RandomDataGeneratorSource extends BasePushSource {
 
@@ -156,7 +155,7 @@ public class RandomDataGeneratorSource extends BasePushSource {
     for(DataGeneratorConfig con : dataGenConfigs) {
       names.add(con.field.isEmpty() ? "<empty field name>" : con.field);
     }
-    event.setSpecificAttribute(LineageSpecificAttribute.ENTITY_NAME, names.isEmpty() ? "No fields" : StringUtils.join(names, ", "));
+    event.setSpecificAttribute(LineageSpecificAttribute.ENTITY_NAME, names.isEmpty() ? "No fields" : String.join(", ", names));
     getContext().publishLineageEvent(event);
 
     return super.init();
@@ -174,24 +173,35 @@ public class RandomDataGeneratorSource extends BasePushSource {
     ExecutorService executor = Executors.newFixedThreadPool(numThreads);
     List<Future<Runnable>> futures = new ArrayList<>(numThreads);
 
-    // Run all the threads
-    for(int i = 0; i < numThreads; i++) {
-      Future future = executor.submit(new GeneratorRunnable(i));
-      futures.add(future);
-    }
+    StageException propagateException = null;
 
-    // Wait for proper execution finish
-    for(Future<Runnable> f : futures) {
-      try {
-        f.get();
-      } catch (InterruptedException|ExecutionException e) {
-        LOG.error("Interrupted data generation thread", e);
+    try {
+      // Run all the threads
+      for (int i = 0; i < numThreads; i++) {
+        Future future = executor.submit(new GeneratorRunnable(i));
+        futures.add(future);
       }
+
+      // Wait for proper execution finish
+      for (Future<Runnable> f : futures) {
+        try {
+          f.get();
+        } catch (InterruptedException | ExecutionException e) {
+          LOG.error("Interrupted data generation thread", e);
+          if(propagateException == null) {
+            propagateException = new StageException(Errors.DEV_001, e.toString(), e);
+          }
+        }
+      }
+    } finally {
+      // Terminate executor that will also clear up threads that were created
+      LOG.info("Shutting down executor service");
+      executor.shutdownNow();
     }
 
-    // Terminate executor that will also clear up threads that were created
-    LOG.info("Shutting down executor service");
-    executor.shutdownNow();
+    if(propagateException != null) {
+      throw propagateException;
+    }
   }
 
   public class GeneratorRunnable implements Runnable {
@@ -337,7 +347,7 @@ public class RandomDataGeneratorSource extends BasePushSource {
   }
 
   public ZonedDateTime getRandomZonedDateTime() {
-    String zoneId = tzValues.get(randBetween(0, tzValues.size()));
+    String zoneId = tzValues.get(randBetween(0, tzValues.size() - 1));
     return ZonedDateTime.of(
         randBetween(1990, 2020),
         randBetween(1, 12),
