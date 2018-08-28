@@ -804,7 +804,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
             return getFieldForMap(field, fieldName);
         }
 
-        com.google.cloud.bigquery.Field.Type bqFieldType = DATA_TYPE_MAP.get(field.getType());
+        LegacySQLTypeName bqFieldType = DATA_TYPE_MAP.get(field.getType());
         if (bqFieldType != null) {
             return com.google.cloud.bigquery.Field.newBuilder(fieldName, bqFieldType)
                     .setMode(Mode.NULLABLE).build();
@@ -824,10 +824,12 @@ public class SkBigQueryTarget extends BigQueryTarget {
 
         Field first = values.get(0);
         LegacySQLTypeName bqType = null;
+        List<com.google.cloud.bigquery.Field> subFields = null;
         Type firstType = first.getType();
         if (Type.LIST_MAP.equals(firstType) || Type.MAP.equals(firstType)) {
-            bqType = getBqTypeForMap(first, fieldName + "[0]");
-            if (bqType == null) {
+            bqType = LegacySQLTypeName.RECORD;
+            subFields = getBqSubFieldsForMap(first, fieldName + "[0]");
+            if (subFields == null) {
                 return null;
             }
         } else if (DATA_TYPE_MAP.containsKey(firstType)) {
@@ -836,7 +838,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
             return null;
         }
 
-        return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().setMode(Mode.REPEATED)
+        return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray(new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().setMode(Mode.REPEATED)
                 .build();
     }
 
@@ -845,14 +847,15 @@ public class SkBigQueryTarget extends BigQueryTarget {
      * field in record
      */
     private com.google.cloud.bigquery.Field getFieldForMap(Field ssField, String fieldName) {
-        com.google.cloud.bigquery.Field.Type bqType = getBqTypeForMap(ssField, fieldName);
-        if (bqType == null) {
+        LegacySQLTypeName bqType = LegacySQLTypeName.RECORD;
+        List<com.google.cloud.bigquery.Field> subFields = getBqSubFieldsForMap(ssField, fieldName);
+        if (subFields == null) {
             return null;
         }
-        return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().build();
+        return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray( new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().build();
     }
 
-    private com.google.cloud.bigquery.Field.Type getBqTypeForMap(Field ssField, String fieldName) {
+    private List<com.google.cloud.bigquery.Field> getBqSubFieldsForMap(Field ssField, String fieldName) {
         Map<String, Field> value = ssField.getValueAsMap();
 
         if (value == null || value.isEmpty()) {
@@ -875,7 +878,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
             }
             fields.add(bqField);
         }
-        return com.google.cloud.bigquery.Field.Type.record(fields);
+        return fields;
     }
 
     class Result {
