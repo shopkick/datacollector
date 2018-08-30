@@ -838,8 +838,13 @@ public class SkBigQueryTarget extends BigQueryTarget {
             return null;
         }
 
-        return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray(new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().setMode(Mode.REPEATED)
-                .build();
+        if (subFields == null) {
+            return com.google.cloud.bigquery.Field.of(fieldName, bqType).toBuilder().setMode(Mode.REPEATED)
+                    .build();
+        } else {
+            return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray(new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().setMode(Mode.REPEATED)
+                    .build();
+        }
     }
 
     /**
@@ -852,7 +857,7 @@ public class SkBigQueryTarget extends BigQueryTarget {
         if (subFields == null) {
             return null;
         }
-        return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray( new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().build();
+        return com.google.cloud.bigquery.Field.of(fieldName, bqType, subFields.toArray(new com.google.cloud.bigquery.Field[subFields.size()])).toBuilder().build();
     }
 
     private List<com.google.cloud.bigquery.Field> getBqSubFieldsForMap(Field ssField, String fieldName) {
